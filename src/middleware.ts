@@ -1,8 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 
-const PROTECTED_PREFIXES = ['/dashboard', '/settings']
-const AUTH_PATHS = ['/login', '/signup']
+const PUBLIC_PATHS = new Set(['/login', '/signup'])
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request })
@@ -33,15 +32,13 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   const { pathname } = request.nextUrl
+  const isPublic = PUBLIC_PATHS.has(pathname)
 
-  const isProtected = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p))
-  const isAuthPath = AUTH_PATHS.includes(pathname)
-
-  if (!user && isProtected) {
+  if (!user && !isPublic) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  if (user && isAuthPath) {
+  if (user && isPublic) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
