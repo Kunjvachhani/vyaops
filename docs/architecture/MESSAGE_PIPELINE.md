@@ -1,0 +1,52 @@
+# Message Processing Pipeline
+
+## Webhook Flow
+```
+1. AiSensy receives WhatsApp message
+2. AiSensy sends webhook to POST /api/webhooks/whatsapp
+3. Verify AiSensy signature (REJECT if invalid)
+4. Acknowledge with 200 immediately (< 1 second)
+5. Queue message for async processing
+6. Lookup organization by sender phone number
+7. Log raw message to whatsapp_messages table
+8. Check: is this a triggered message? (button tap, prefix, reply to bot)
+   - NO → classify silently, log, do NOT respond. Exit.
+   - YES → continue pipeline
+9. Send to DeepSeek V4 Pro: classify intent + extract entities
+10. Send AI output to Qwen 3.7 Max (via OpenRouter): eval gate scoring
+11. Route based on score:
+    ≥0.85 → auto-process
+    0.70-0.84 → confirm with buttons
+    0.50-0.69 → clarify with options
+    <0.50 → show guided menu
+12. On confirmation → create/update database records
+13. Trigger downstream workflows (inventory update, order progress, etc.)
+14. Send response via AiSensy
+15. Log outcome to whatsapp_messages (eval_score, was_processed, processing_result)
+```
+
+## Webhook Payload (AiSensy format)
+```json
+{
+  "message_id": "wamid.xxx",
+  "from": "919876543210",
+  "type": "text|interactive|button",
+  "text": { "body": "rajubhai no order 500 piece valve body" },
+  "interactive": { "type": "list_reply|button_reply", "list_reply": { "id": "new_order" } },
+  "timestamp": "1717401600"
+}
+```
+
+## Scheduled Messages (n8n cron workflows)
+| Time | Message | Tier |
+|------|---------|------|
+| 7:30 AM | Production plan for today | tier_2+ |
+| 9:00 AM | Overdue invoice summary | tier_1+ |
+| 7:00 PM | Production summary + inventory snapshot | tier_2+ |
+| 6:00 PM | Open orders summary | tier_1+ |
+
+## WhatsApp Interactive Components
+- Quick Reply Buttons: 3 max, for confirmations and top-level nav
+- List Messages: 10 options, for customer/product/vendor selection
+- WhatsApp Flows: Multi-step forms for production logging, new customer setup
+All components dynamically generated based on org tier + master data.

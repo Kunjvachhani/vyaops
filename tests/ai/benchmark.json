@@ -1,0 +1,11 @@
+{
+  "version": "1.0.0",
+  "description": "Initial benchmark - 50 test cases required before launch. Start with these 5, add 45 more during Sprint 4.",
+  "test_cases": [
+    {"id":"TC-001","source":"manual","difficulty":"easy","raw_message":"rajubhai no order 500 piece valve body kal deliver","expected_intent":"NEW_ORDER","expected_entities":{"customer_name_raw":"rajubhai","product_raw":"valve body","quantity":500},"tags":["hinglish","order"]},
+    {"id":"TC-002","source":"manual","difficulty":"easy","raw_message":"aaj batch 48 mein 200 ban gaya 12 reject shrinkage","expected_intent":"PRODUCTION_UPDATE","expected_entities":{"batch_number":"48","quantity_produced":200,"quantity_rejected":12,"defect_type":"shrinkage"},"tags":["hinglish","production"]},
+    {"id":"TC-003","source":"manual","difficulty":"medium","raw_message":"shah industries ka invoice bhejo 45000 ka","expected_intent":"INVOICE_REQUEST","expected_entities":{"customer_name_raw":"shah industries","amount_raw":"45000"},"tags":["hindi","invoice"]},
+    {"id":"TC-004","source":"manual","difficulty":"easy","raw_message":"valve body stock kitna hai","expected_intent":"INVENTORY_CHECK","expected_entities":{"product_raw":"valve body"},"tags":["hinglish","inventory"]},
+    {"id":"TC-005","source":"manual","difficulty":"hard","raw_message":"happy diwali bhai! party kab hai?","expected_intent":"GENERAL_QUERY","expected_entities":{},"tags":["hindi","non_business"]}
+  ]
+}

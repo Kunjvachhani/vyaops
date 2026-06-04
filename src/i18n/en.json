@@ -1,0 +1,40 @@
+{
+  "common": {
+    "appName": "VyaOps",
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "back": "Back",
+    "next": "Next",
+    "submit": "Submit",
+    "search": "Search",
+    "noResults": "No results found"
+  },
+  "auth": {
+    "login": "Sign In",
+    "logout": "Sign Out",
+    "signup": "Create Account",
+    "email": "Email",
+    "password": "Password",
+    "phone": "Phone Number",
+    "otp": "OTP",
+    "sendOtp": "Send OTP",
+    "verifyOtp": "Verify OTP",
+    "forgotPassword": "Forgot password?",
+    "noAccount": "Don't have an account?",
+    "haveAccount": "Already have an account?"
+  },
+  "errors": {
+    "generic": "Something went wrong. Please try again.",
+    "unauthorized": "You are not authorised to perform this action.",
+    "notFound": "The requested resource was not found.",
+    "validationFailed": "Please check your input and try again.",
+    "serverError": "Server error. Our team has been notified."
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome": "Welcome to VyaOps"
+  }
+}

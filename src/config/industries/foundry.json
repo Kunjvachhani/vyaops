@@ -1,0 +1,18 @@
+{
+  "industry": "foundry",
+  "display_name": { "en": "Foundry & Engineering", "gu": "ફાઉન્ડ્રી", "hi": "फाउंड्री" },
+  "defect_taxonomy": [
+    { "id": "shrinkage", "en": "Shrinkage", "gu": "સંકોચન", "hi": "सिकुड़न" },
+    { "id": "porosity", "en": "Porosity", "gu": "છિદ્રાળુતા", "hi": "सरंध्रता" },
+    { "id": "sand_inclusion", "en": "Sand Inclusion", "gu": "રેતી", "hi": "रेत समावेश" },
+    { "id": "misrun", "en": "Misrun", "gu": "મિસરન", "hi": "मिसरन" },
+    { "id": "cold_shut", "en": "Cold Shut", "gu": "કોલ્ડ શટ", "hi": "कोल्ड शट" },
+    { "id": "blowholes", "en": "Blowholes", "gu": "બ્લોહોલ્સ", "hi": "ब्लोहोल्स" },
+    { "id": "dimensional", "en": "Dimensional Error", "gu": "માપ ભૂલ", "hi": "माप त्रुटि" },
+    { "id": "surface_finish", "en": "Surface Finish", "gu": "સરફેસ ફિનિશ", "hi": "सरफेस फिनिश" },
+    { "id": "other", "en": "Other", "gu": "અન્ય", "hi": "अन्य" }
+  ],
+  "units": { "production": "pieces", "raw_material": "tons", "weight": "kg" },
+  "compliance": ["gst_monthly", "pf_monthly", "esi_monthly", "factory_license_annual", "pollution_consent_annual"],
+  "kpi_defaults": { "target_rejection_rate": 5.0, "payment_terms_days": 30 }
+}
