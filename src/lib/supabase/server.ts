@@ -26,3 +26,30 @@ export async function createClient() {
     }
   )
 }
+
+export type AuthUser = {
+  id: string
+  email: string | null
+  org_id: string
+  role: 'owner' | 'manager' | 'worker' | 'viewer'
+}
+
+export async function getCurrentUser(): Promise<AuthUser | null> {
+  const supabase = await createClient()
+  const { data: { user }, error } = await supabase.auth.getUser()
+
+  if (error || !user) return null
+
+  const meta = user.user_metadata as Record<string, string> | undefined
+  const org_id = meta?.org_id
+  const role = meta?.role as AuthUser['role'] | undefined
+
+  if (!org_id || !role) return null
+
+  return {
+    id: user.id,
+    email: user.email ?? null,
+    org_id,
+    role,
+  }
+}
