@@ -15,6 +15,7 @@ export async function signupAction(formData: FormData): Promise<SignupResult> {
   const role = (formData.get('role') as string) || 'owner'
   const address = (formData.get('address') as string | null) || null
   const gstin = ((formData.get('gstin') as string | null) || '').trim().toUpperCase() || null
+  const tier = (formData.get('tier') as string) || 'tier_1'
 
   const supabase = await createClient()
 
@@ -50,6 +51,7 @@ export async function signupAction(formData: FormData): Promise<SignupResult> {
         email,
         address,
         gstin,
+        tier,
       })
       .select('id')
       .single()
@@ -84,8 +86,14 @@ export async function signupAction(formData: FormData): Promise<SignupResult> {
 
     if (metaError) {
       console.error('[signup] updateUserById error:', metaError.message)
-      // Non-fatal: metadata update failing doesn't block the user from onboarding
-      // They'll be redirected but getCurrentUser() will return null until metadata is fixed
+    }
+
+    // Refresh the session so the new JWT includes org_id + role in user_metadata.
+    // Without this the stale JWT causes a redirect loop: layout → /login → /dashboard → repeat.
+    const { error: refreshError } = await supabase.auth.refreshSession()
+    if (refreshError) {
+      console.error('[signup] refreshSession error:', refreshError.message)
+      // Non-fatal: user can sign in manually to get a fresh JWT
     }
 
     return { success: true }

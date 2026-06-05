@@ -31,14 +31,23 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  // A user counts as "authenticated for the app" only once their JWT carries
+  // org_id + role in user_metadata — the same predicate getCurrentUser() and
+  // the RLS policies use. Keying off bare session existence here while the
+  // dashboard layout keys off org_id causes an infinite /login ⇄ /dashboard
+  // redirect loop whenever the JWT is stale (e.g. right after signup, before
+  // the session is refreshed).
+  const meta = user?.user_metadata as Record<string, unknown> | undefined
+  const isAuthed = Boolean(user && meta?.org_id && meta?.role)
+
   const { pathname } = request.nextUrl
   const isPublic = PUBLIC_PATHS.has(pathname)
 
-  if (!user && !isPublic) {
+  if (!isAuthed && !isPublic) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  if (user && isPublic) {
+  if (isAuthed && isPublic) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 

@@ -44,12 +44,15 @@ const ROLES = [
 const selectClass =
   'flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50'
 
+type Tier = 'tier_1' | 'tier_2' | 'tier_3'
+
 export default function SignupPage() {
   const t = useTranslations()
   const router = useRouter()
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [serverError, setServerError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [tier, setTier] = useState<Tier>('tier_1')
 
   const tabs = [
     { href: '/login', label: t('auth.login') },
@@ -276,6 +279,35 @@ export default function SignupPage() {
             {fieldErrors.role && (
               <p className="text-xs text-destructive">{fieldErrors.role}</p>
             )}
+          </div>
+
+          {/* Plan / Tier */}
+          <div className="space-y-2">
+            <Label>{t('auth.selectPlan')}</Label>
+            <input type="hidden" name="tier" value={tier} />
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {(
+                [
+                  { value: 'tier_1', name: t('auth.tier1Name'), desc: t('auth.tier1Desc') },
+                  { value: 'tier_2', name: t('auth.tier2Name'), desc: t('auth.tier2Desc') },
+                  { value: 'tier_3', name: t('auth.tier3Name'), desc: t('auth.tier3Desc') },
+                ] as { value: Tier; name: string; desc: string }[]
+              ).map((plan) => (
+                <button
+                  key={plan.value}
+                  type="button"
+                  onClick={() => setTier(plan.value)}
+                  className={`rounded-md border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    tier === plan.value
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                      : 'border-input hover:border-primary/50 hover:bg-accent'
+                  }`}
+                >
+                  <p className="text-sm font-semibold">{plan.name}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{plan.desc}</p>
+                </button>
+              ))}
+            </div>
           </div>
 
           {serverError && (

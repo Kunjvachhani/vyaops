@@ -46,7 +46,14 @@
     "roleViewer": "Accountant / Viewer",
     "address": "Factory / Office Address",
     "gstin": "GSTIN",
-    "invalidGstin": "GSTIN must be 15 characters in the format: 24AABCU9603R1ZX"
+    "invalidGstin": "GSTIN must be 15 characters in the format: 24AABCU9603R1ZX",
+    "selectPlan": "Choose your plan",
+    "tier1Name": "Starter",
+    "tier1Desc": "Orders, invoices, customers & vendors",
+    "tier2Name": "Growth",
+    "tier2Desc": "+ Production, quality, inventory & cash flow",
+    "tier3Name": "Pro",
+    "tier3Desc": "+ Compliance, SOP builder & advanced analytics"
   },
   "errors": {
     "generic": "Something went wrong. Please try again.",
@@ -58,6 +65,87 @@
   "dashboard": {
     "title": "Dashboard",
     "welcome": "Welcome to VyaOps"
+  },
+  "pages": {
+    "dashboard": {
+      "title": "Dashboard",
+      "description": "Overview of your business — orders, invoices, production, and cash flow at a glance.",
+      "sprint": "Building in Sprint 6",
+      "placeholder": "Your business overview will appear here once Sprint 6 is complete."
+    },
+    "orders": {
+      "title": "Orders",
+      "description": "Track and manage all customer orders from creation to dispatch.",
+      "sprint": "Building in Sprint 3",
+      "placeholder": "Order management will be available here once Sprint 3 is complete."
+    },
+    "invoices": {
+      "title": "Invoices",
+      "description": "Create, send, and track GST-compliant invoices for all your customers.",
+      "sprint": "Building in Sprint 3",
+      "placeholder": "Invoice management will be available here once Sprint 3 is complete."
+    },
+    "customers": {
+      "title": "Customers",
+      "description": "Manage your customer database, order history, and payment records.",
+      "sprint": "Building in Sprint 3",
+      "placeholder": "Customer management will be available here once Sprint 3 is complete."
+    },
+    "vendors": {
+      "title": "Vendors",
+      "description": "Manage suppliers, purchase orders, and vendor payments.",
+      "sprint": "Building in Sprint 5",
+      "placeholder": "Vendor management will be available here once Sprint 5 is complete."
+    },
+    "production": {
+      "title": "Production",
+      "description": "Track batch progress, machine utilisation, and production targets.",
+      "sprint": "Building in Sprint 5",
+      "placeholder": "Production tracking will be available here once Sprint 5 is complete."
+    },
+    "quality": {
+      "title": "Quality",
+      "description": "Monitor defect rates, inspection results, and quality trends.",
+      "sprint": "Building in Sprint 5",
+      "placeholder": "Quality dashboards will be available here once Sprint 5 is complete."
+    },
+    "inventory": {
+      "title": "Inventory",
+      "description": "Track raw materials, finished goods, and stock levels in real time.",
+      "sprint": "Building in Sprint 5",
+      "placeholder": "Inventory tracking will be available here once Sprint 5 is complete."
+    },
+    "cashFlow": {
+      "title": "Cash Flow",
+      "description": "Monitor receivables, payables, and your net cash position.",
+      "sprint": "Building in Sprint 6",
+      "placeholder": "Cash flow analysis will be available here once Sprint 6 is complete."
+    },
+    "compliance": {
+      "title": "Compliance",
+      "description": "Stay on top of GST filings, labour law requirements, and regulatory deadlines.",
+      "sprint": "Building in Sprint 7",
+      "placeholder": "Compliance tools will be available here once Sprint 7 is complete."
+    },
+    "sopBuilder": {
+      "title": "SOP Builder",
+      "description": "Create and share standard operating procedures for your factory floor.",
+      "sprint": "Building in Sprint 7",
+      "placeholder": "SOP Builder will be available here once Sprint 7 is complete."
+    },
+    "settings": {
+      "title": "Settings",
+      "description": "Manage your organisation profile, billing, team members, and integrations.",
+      "sprint": "Building in Sprint 7",
+      "placeholder": "Settings will be available here once Sprint 7 is complete."
+    }
+  },
+  "featureGate": {
+    "lockedTitle": "{feature} is available on the {tier} plan.",
+    "upgradeMessage": "Upgrade to unlock production tracking, quality dashboards, and more.",
+    "upgradeButton": "Upgrade →",
+    "tier2Name": "Growth",
+    "tier3Name": "Pro"
   },
   "nav": {
     "dashboard": "Dashboard",
