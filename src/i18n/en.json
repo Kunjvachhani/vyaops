@@ -58,5 +58,22 @@
   "dashboard": {
     "title": "Dashboard",
     "welcome": "Welcome to VyaOps"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "orders": "Orders",
+    "invoices": "Invoices",
+    "customers": "Customers",
+    "vendors": "Vendors",
+    "production": "Production",
+    "quality": "Quality",
+    "inventory": "Inventory",
+    "cashFlow": "Cash Flow",
+    "compliance": "Compliance",
+    "sopBuilder": "SOP Builder",
+    "settings": "Settings",
+    "signOut": "Sign Out",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu"
   }
 }

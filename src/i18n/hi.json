@@ -58,5 +58,22 @@
   "dashboard": {
     "title": "डैशबोर्ड",
     "welcome": "व्याओप्स में आपका स्वागत है"
+  },
+  "nav": {
+    "dashboard": "डैशबोर्ड",
+    "orders": "ऑर्डर",
+    "invoices": "चालान",
+    "customers": "ग्राहक",
+    "vendors": "विक्रेता",
+    "production": "उत्पादन",
+    "quality": "गुणवत्ता",
+    "inventory": "इन्वेंटरी",
+    "cashFlow": "नकद प्रवाह",
+    "compliance": "अनुपालन",
+    "sopBuilder": "SOP बिल्डर",
+    "settings": "सेटिंग्स",
+    "signOut": "साइन आउट",
+    "openMenu": "मेनू खोलें",
+    "closeMenu": "मेनू बंद करें"
   }
 }

@@ -58,5 +58,22 @@
   "dashboard": {
     "title": "ડેશબોર્ડ",
     "welcome": "વ્યાઓપ્સમાં આપનું સ્વાગત છે"
+  },
+  "nav": {
+    "dashboard": "ડેશબોર્ડ",
+    "orders": "ઓર્ડર",
+    "invoices": "ઇન્વૉઇસ",
+    "customers": "ગ્રાહકો",
+    "vendors": "વિક્રેતા",
+    "production": "ઉત્પાદન",
+    "quality": "ગુણવત્તા",
+    "inventory": "ઇન્વેન્ટ્રી",
+    "cashFlow": "રોકડ પ્રવાહ",
+    "compliance": "અનુપાલન",
+    "sopBuilder": "SOP બિલ્ડર",
+    "settings": "સેટિંગ્સ",
+    "signOut": "સાઇન આઉટ",
+    "openMenu": "મેનૂ ખોલો",
+    "closeMenu": "મેનૂ બંધ કરો"
   }
 }
