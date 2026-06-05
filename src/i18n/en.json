@@ -4,13 +4,19 @@
     "loading": "Loading...",
     "save": "Save",
     "cancel": "Cancel",
+    "confirm": "Confirm",
     "delete": "Delete",
     "edit": "Edit",
     "back": "Back",
     "next": "Next",
     "submit": "Submit",
     "search": "Search",
+    "filter": "Filter",
+    "export": "Export",
     "noResults": "No results found",
+    "noData": "No data found",
+    "success": "Success",
+    "error": "Error",
     "optional": "optional"
   },
   "auth": {
@@ -60,7 +66,10 @@
     "unauthorized": "You are not authorised to perform this action.",
     "notFound": "The requested resource was not found.",
     "validationFailed": "Please check your input and try again.",
-    "serverError": "Server error. Our team has been notified."
+    "serverError": "Server error. Our team has been notified.",
+    "sessionExpired": "Session expired. Please sign in again.",
+    "permissionDenied": "Permission denied.",
+    "featureUnavailable": "Feature not available on your plan."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -163,5 +172,14 @@
     "signOut": "Sign Out",
     "openMenu": "Open menu",
     "closeMenu": "Close menu"
+  },
+  "tiers": {
+    "starter": "Starter",
+    "professional": "Professional",
+    "enterprise": "Enterprise"
+  },
+  "upsell": {
+    "available": "Available on {tier} plan",
+    "upgrade": "Upgrade to unlock"
   }
 }

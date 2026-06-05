@@ -4,13 +4,19 @@
     "loading": "लोड हो रहा है...",
     "save": "सहेजें",
     "cancel": "रद्द करें",
+    "confirm": "पुष्टि करें",
     "delete": "हटाएं",
     "edit": "संपादित करें",
     "back": "वापस",
     "next": "आगे",
     "submit": "जमा करें",
     "search": "खोजें",
+    "filter": "फ़िल्टर",
+    "export": "निर्यात करें",
     "noResults": "कोई परिणाम नहीं मिला",
+    "noData": "कोई डेटा नहीं मिला",
+    "success": "सफलता",
+    "error": "त्रुटि",
     "optional": "वैकल्पिक"
   },
   "auth": {
@@ -60,7 +66,10 @@
     "unauthorized": "आप यह कार्य करने के लिए अधिकृत नहीं हैं।",
     "notFound": "अनुरोधित संसाधन नहीं मिला।",
     "validationFailed": "कृपया अपना इनपुट जाँचें और फिर से कोशिश करें।",
-    "serverError": "सर्वर त्रुटि। हमारी टीम को सूचित किया गया है।"
+    "serverError": "सर्वर त्रुटि। हमारी टीम को सूचित किया गया है।",
+    "sessionExpired": "सत्र समाप्त हो गया। कृपया फिर से साइन इन करें।",
+    "permissionDenied": "अनुमति नहीं है।",
+    "featureUnavailable": "यह सुविधा आपके प्लान में उपलब्ध नहीं है।"
   },
   "dashboard": {
     "title": "डैशबोर्ड",
@@ -163,5 +172,14 @@
     "signOut": "साइन आउट",
     "openMenu": "मेनू खोलें",
     "closeMenu": "मेनू बंद करें"
+  },
+  "tiers": {
+    "starter": "Starter",
+    "professional": "Professional",
+    "enterprise": "Enterprise"
+  },
+  "upsell": {
+    "available": "{tier} प्लान पर उपलब्ध",
+    "upgrade": "अनलॉक करने के लिए अपग्रेड करें"
   }
 }

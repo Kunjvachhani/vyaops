@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { NextIntlClientProvider } from 'next-intl'
-import { getMessages } from 'next-intl/server'
+import { getMessages, getLocale } from 'next-intl/server'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -13,10 +13,10 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  const messages = await getMessages()
+  const [messages, locale] = await Promise.all([getMessages(), getLocale()])
 
   return (
-    <html lang="en">
+    <html lang={locale}>
       <body>
         <NextIntlClientProvider messages={messages}>
           {children}

@@ -4,13 +4,19 @@
     "loading": "લોડ થઈ રહ્યું છે...",
     "save": "સાચવો",
     "cancel": "રદ કરો",
+    "confirm": "પુષ્ટિ કરો",
     "delete": "કાઢી નાખો",
     "edit": "સંપાદિત કરો",
     "back": "પાછળ",
     "next": "આગળ",
     "submit": "સબમિટ કરો",
     "search": "શોધો",
+    "filter": "ફિલ્ટર",
+    "export": "નિકાસ કરો",
     "noResults": "કોઈ પરિણામ મળ્યું નથી",
+    "noData": "કોઈ ડેટા મળ્યો નથી",
+    "success": "સફળ",
+    "error": "ભૂલ",
     "optional": "વૈકલ્પિક"
   },
   "auth": {
@@ -60,7 +66,10 @@
     "unauthorized": "તમને આ ક્રિયા કરવાની અધિકૃતતા નથી.",
     "notFound": "વિનંતી કરેલ સ્રોત મળ્યો નથી.",
     "validationFailed": "કૃપા કરીને તમારું ઇનપુટ તપાસો અને ફરી પ્રયાસ કરો.",
-    "serverError": "સર્વર ભૂલ. અમારી ટીમને જાણ કરવામાં આવી છે."
+    "serverError": "સર્વર ભૂલ. અમારી ટીમને જાણ કરવામાં આવી છે.",
+    "sessionExpired": "સત્ર સમાપ્ત થઈ ગયું. કૃપા કરીને ફરીથી સાઇન ઇન કરો.",
+    "permissionDenied": "પરવાનગી નથી.",
+    "featureUnavailable": "આ સુવિધા તમારા પ્લાન પર ઉપલબ્ધ નથી."
   },
   "dashboard": {
     "title": "ડેશબોર્ડ",
@@ -163,5 +172,14 @@
     "signOut": "સાઇન આઉટ",
     "openMenu": "મેનૂ ખોલો",
     "closeMenu": "મેનૂ બંધ કરો"
+  },
+  "tiers": {
+    "starter": "Starter",
+    "professional": "Professional",
+    "enterprise": "Enterprise"
+  },
+  "upsell": {
+    "available": "{tier} પ્લાન પર ઉપલબ્ધ",
+    "upgrade": "અનલૉક કરવા માટે અપગ્રેડ કરો"
   }
 }
