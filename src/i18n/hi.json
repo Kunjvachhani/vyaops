@@ -10,7 +10,8 @@
     "next": "आगे",
     "submit": "जमा करें",
     "search": "खोजें",
-    "noResults": "कोई परिणाम नहीं मिला"
+    "noResults": "कोई परिणाम नहीं मिला",
+    "optional": "वैकल्पिक"
   },
   "auth": {
     "login": "साइन इन करें",
@@ -24,7 +25,28 @@
     "verifyOtp": "ओटीपी सत्यापित करें",
     "forgotPassword": "पासवर्ड भूल गए?",
     "noAccount": "खाता नहीं है?",
-    "haveAccount": "पहले से खाता है?"
+    "haveAccount": "पहले से खाता है?",
+    "fullName": "पूरा नाम",
+    "companyName": "कंपनी का नाम",
+    "city": "शहर",
+    "industry": "उद्योग",
+    "selectIndustry": "अपना उद्योग चुनें",
+    "signingIn": "साइन इन हो रहा है...",
+    "creatingAccount": "खाता बना रहे हैं...",
+    "loginError": "गलत ईमेल या पासवर्ड। फिर से कोशिश करें।",
+    "signupError": "खाता बनाने में विफल। फिर से कोशिश करें।",
+    "invalidEmail": "कृपया एक वैध ईमेल पता दर्ज करें।",
+    "passwordMinLength": "पासवर्ड कम से कम 6 अक्षरों का होना चाहिए।",
+    "fieldRequired": "यह फ़ील्ड आवश्यक है।",
+    "yourRole": "कंपनी में आपकी भूमिका",
+    "selectRole": "अपनी भूमिका चुनें",
+    "roleOwner": "फैक्ट्री / व्यवसाय स्वामी",
+    "roleManager": "मैनेजर / सुपरवाइज़र",
+    "roleWorker": "कर्मचारी / ऑपरेटर",
+    "roleViewer": "अकाउंटेंट / व्यूअर",
+    "address": "फैक्ट्री / ऑफिस पता",
+    "gstin": "जीएसटीआईएन",
+    "invalidGstin": "GSTIN 15 अक्षरों का होना चाहिए: 24AABCU9603R1ZX"
   },
   "errors": {
     "generic": "कुछ गलत हो गया। कृपया फिर से कोशिश करें।",

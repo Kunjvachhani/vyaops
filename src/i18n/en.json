@@ -10,7 +10,8 @@
     "next": "Next",
     "submit": "Submit",
     "search": "Search",
-    "noResults": "No results found"
+    "noResults": "No results found",
+    "optional": "optional"
   },
   "auth": {
     "login": "Sign In",
@@ -24,7 +25,28 @@
     "verifyOtp": "Verify OTP",
     "forgotPassword": "Forgot password?",
     "noAccount": "Don't have an account?",
-    "haveAccount": "Already have an account?"
+    "haveAccount": "Already have an account?",
+    "fullName": "Full Name",
+    "companyName": "Company Name",
+    "city": "City",
+    "industry": "Industry",
+    "selectIndustry": "Select your industry",
+    "signingIn": "Signing in...",
+    "creatingAccount": "Creating account...",
+    "loginError": "Invalid email or password. Please try again.",
+    "signupError": "Failed to create account. Please try again.",
+    "invalidEmail": "Please enter a valid email address.",
+    "passwordMinLength": "Password must be at least 6 characters.",
+    "fieldRequired": "This field is required.",
+    "yourRole": "Your Role in the Company",
+    "selectRole": "Select your role",
+    "roleOwner": "Factory / Business Owner",
+    "roleManager": "Manager / Supervisor",
+    "roleWorker": "Employee / Operator",
+    "roleViewer": "Accountant / Viewer",
+    "address": "Factory / Office Address",
+    "gstin": "GSTIN",
+    "invalidGstin": "GSTIN must be 15 characters in the format: 24AABCU9603R1ZX"
   },
   "errors": {
     "generic": "Something went wrong. Please try again.",
