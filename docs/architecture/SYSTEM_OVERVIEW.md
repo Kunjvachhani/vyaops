@@ -6,7 +6,7 @@
 
 ## Data Flow
 ```
-WhatsApp Message → AiSensy Webhook → n8n → DeepSeek (generate) → Qwen 3.7 Max (eval) → Supabase → Response via AiSensy
+WhatsApp Message → Meta Webhook (via Dualhook Webhook Override) → n8n → DeepSeek (generate) → Qwen 3.7 Max (eval) → Supabase → Response via Meta Cloud API
 Web Dashboard ← Supabase Realtime ← same database
 ```
 

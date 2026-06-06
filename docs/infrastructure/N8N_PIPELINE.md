@@ -5,7 +5,7 @@
 ### Message-Triggered (real-time, <15s processing)
 | Workflow | Trigger | Action |
 |----------|---------|--------|
-| whatsapp-message-handler | AiSensy webhook | Routes to sub-workflows based on intent |
+| whatsapp-message-handler | Meta Cloud API webhook (via Dualhook Webhook Override) | Routes to sub-workflows based on intent |
 | order-intake | Intent=NEW_ORDER | Parse → match → eval → confirm → create |
 | invoice-generator | Intent=INVOICE_REQUEST or order completed | Generate PDF → save → send |
 | production-logger | Intent=PRODUCTION_UPDATE | Parse → validate → save → update inventory/orders |

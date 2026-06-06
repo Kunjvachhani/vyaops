@@ -2,17 +2,17 @@
 
 ## What It Is
 Meta feature (2024+) allowing WhatsApp Business App and Cloud API on same number simultaneously.
-India fully supported. AiSensy BSP supports Coexistence onboarding.
+India fully supported. Dualhook handles Coexistence onboarding via Embedded Signup and Webhook Override.
 
 ## How It Works
 - Factory owner's WhatsApp Business App unchanged (same number, chats, groups, calls)
-- Cloud API mirrors messages bidirectionally via AiSensy
+- Meta Cloud API mirrors messages bidirectionally; webhooks routed to our server via Dualhook Webhook Override
 - Our system receives ALL messages via webhook
 - Messages echoed: bot replies visible in owner's app, owner's manual replies visible to our API
 
 ## Onboarding (customer setup)
 1. Verify WhatsApp Business App v2.24.17+
-2. AiSensy Coexistence onboarding (QR scan, 5-10 minutes)
+2. Dualhook Coexistence onboarding via Embedded Signup (QR scan or web flow, 5-10 minutes)
 3. Configure webhook routing (phone → tenant mapping)
 4. Input master data (customers, products, vendors)
 5. Configure preferences (language, schedule times, thresholds)

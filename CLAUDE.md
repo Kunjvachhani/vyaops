@@ -45,7 +45,7 @@ REQUIRED READING ORDER:
 | AI 90% | DeepSeek V4 Pro API | $0.435/M tokens, good multilingual |
 | AI Eval | Qwen 3.7 Max (via OpenRouter) | Cross-model eval gate scoring |
 | AI 10% | Qwen 3.7 Max (via OpenRouter) | Complex reasoning fallback |
-| WhatsApp | AiSensy BSP (Coexistence mode) | ₹999/mo, zero Meta markup, official API |
+| WhatsApp | Dualhook (Coexistence + Webhook Override) + Meta Cloud API (direct) | Dualhook $12-115/mo, zero per-message markup, Meta bills directly |
 | Workflows | n8n (self-hosted, Docker) | Visual, 500+ integrations, you know it |
 | Payments | Razorpay Subscriptions API | UPI Autopay, Indian SaaS standard |
 | Hosting | Vercel (Next.js) + Hetzner CX22 (n8n) | Vercel auto-deploys, Hetzner cheap |
@@ -126,7 +126,7 @@ npm run test:benchmark         # AI eval benchmark suite
 2. NEVER hard delete any record. Soft delete via `deleted_at` only.
 3. EVERY mutation writes to `audit_log` via `src/lib/utils/audit.ts`.
 4. EVERY destructive action requires explicit user confirmation.
-5. EVERY webhook verifies sender signature before processing.
+5. EVERY webhook verifies Meta's X-Hub-Signature-256 using META_WHATSAPP_APP_SECRET before processing.
 6. EVERY API route checks org tier before allowing feature access.
 7. NEVER trust client-side tier checks alone. Re-verify server-side.
 8. NEVER log sensitive data (full phones, GSTINs, amounts) to Sentry.
@@ -162,6 +162,7 @@ npm run test:benchmark         # AI eval benchmark suite
 - All outbound templates pre-approved by Meta (defined in `docs/whatsapp/TEMPLATES.md`).
 - Bot NEVER auto-replies to non-triggered messages (Opt-In Trigger Model).
 - Interactive messages dynamically generated based on org tier + master data.
+- Webhook payloads arrive directly from Meta via Dualhook's Webhook Override. Verify using META_WHATSAPP_APP_SECRET (X-Hub-Signature-256 header).
 - Webhook acknowledged in <1 second. Processing is async.
 
 ---
@@ -218,7 +219,7 @@ vyaops/
 │   │   │   └── settings/
 │   │   ├── (admin)/                  # Our internal admin
 │   │   ├── api/
-│   │   │   ├── webhooks/whatsapp/    # AiSensy webhook
+│   │   │   ├── webhooks/whatsapp/    # Meta Cloud API webhook (via Dualhook Webhook Override)
 │   │   │   ├── webhooks/razorpay/    # Razorpay webhook
 │   │   │   ├── orders/
 │   │   │   ├── invoices/
@@ -244,7 +245,7 @@ vyaops/
 │   │   │   ├── model-router.ts
 │   │   │   └── eval-gate.ts
 │   │   ├── whatsapp/
-│   │   │   ├── aisensy.ts
+│   │   │   ├── meta-cloud-api.ts
 │   │   │   ├── templates.ts
 │   │   │   └── interactive.ts
 │   │   ├── billing/
@@ -339,9 +340,13 @@ SUPABASE_SERVICE_ROLE_KEY=
 DEEPSEEK_API_KEY=
 OPENROUTER_API_KEY=
 
-# WhatsApp (AiSensy)
-AISENSY_API_KEY=
-AISENSY_WEBHOOK_SECRET=
+# WhatsApp (Meta Cloud API + Dualhook)
+META_WHATSAPP_ACCESS_TOKEN=
+META_WHATSAPP_PHONE_NUMBER_ID=
+META_WHATSAPP_BUSINESS_ACCOUNT_ID=
+META_WHATSAPP_VERIFY_TOKEN=
+META_WHATSAPP_APP_SECRET=
+DUALHOOK_API_KEY=
 
 # Razorpay
 RAZORPAY_KEY_ID=

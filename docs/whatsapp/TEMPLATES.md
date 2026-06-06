@@ -1,7 +1,7 @@
 # WhatsApp Message Templates
 
 ## Templates must be pre-approved by Meta before use.
-Submit via AiSensy dashboard. Approval takes 24-48 hours.
+Submit via Meta Business Suite → WhatsApp Manager → Message Templates. Approval takes 1-24 hours.
 
 ## Template List (submit in Sprint 1)
 

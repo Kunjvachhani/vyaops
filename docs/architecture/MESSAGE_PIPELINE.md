@@ -2,9 +2,9 @@
 
 ## Webhook Flow
 ```
-1. AiSensy receives WhatsApp message
-2. AiSensy sends webhook to POST /api/webhooks/whatsapp
-3. Verify AiSensy signature (REJECT if invalid)
+1. Meta receives WhatsApp message on the Cloud API number
+2. Meta sends webhook to POST /api/webhooks/whatsapp (routed via Dualhook Webhook Override)
+3. Verify Meta X-Hub-Signature-256 using META_WHATSAPP_APP_SECRET (REJECT if invalid)
 4. Acknowledge with 200 immediately (< 1 second)
 5. Queue message for async processing
 6. Lookup organization by sender phone number
@@ -21,19 +21,33 @@
     <0.50 → show guided menu
 12. On confirmation → create/update database records
 13. Trigger downstream workflows (inventory update, order progress, etc.)
-14. Send response via AiSensy
+14. Send response via Meta Cloud API (graph.facebook.com/v21.0/{PHONE_NUMBER_ID}/messages)
 15. Log outcome to whatsapp_messages (eval_score, was_processed, processing_result)
 ```
 
-## Webhook Payload (AiSensy format)
+## Webhook Payload (Meta Cloud API format)
 ```json
 {
-  "message_id": "wamid.xxx",
-  "from": "919876543210",
-  "type": "text|interactive|button",
-  "text": { "body": "rajubhai no order 500 piece valve body" },
-  "interactive": { "type": "list_reply|button_reply", "list_reply": { "id": "new_order" } },
-  "timestamp": "1717401600"
+  "object": "whatsapp_business_account",
+  "entry": [{
+    "id": "WHATSAPP_BUSINESS_ACCOUNT_ID",
+    "changes": [{
+      "value": {
+        "messaging_product": "whatsapp",
+        "metadata": { "display_phone_number": "91XXXXXXXXXX", "phone_number_id": "PHONE_NUMBER_ID" },
+        "contacts": [{ "profile": { "name": "Raju Bhai" }, "wa_id": "919876543210" }],
+        "messages": [{
+          "id": "wamid.xxx",
+          "from": "919876543210",
+          "type": "text|interactive|button",
+          "text": { "body": "rajubhai no order 500 piece valve body" },
+          "interactive": { "type": "list_reply|button_reply", "list_reply": { "id": "new_order" } },
+          "timestamp": "1717401600"
+        }]
+      },
+      "field": "messages"
+    }]
+  }]
 }
 ```
 

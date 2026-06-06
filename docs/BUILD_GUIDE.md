@@ -32,7 +32,8 @@ Claude Code works sequentially — one task, done well, before the next. This is
 2.  Supabase       → create project (region: South Asia or Singapore)
 3.  Vercel         → connect to GitHub repo
 4.  Hetzner Cloud  → create CX22 server (Ubuntu 24.04)
-5.  AiSensy        → register, explore Coexistence docs
+5.  Dualhook       → sign up (dualhook.com), Developer plan ($12/mo) for dev, Platform ($115/mo) for production
+5b. Meta Business Suite → set up WhatsApp Business Account, verify business
 6.  OpenRouter     → get API key (Qwen 3.7 Max)
 7.  DeepSeek       → get API key (5M free tokens on signup)
 8.  Razorpay       → create business account (KYC takes 2-3 days, start early)
@@ -180,7 +181,7 @@ feature gating redirects work, language switching works.
 Fix any issues found during testing."
 ```
 
-**End of Sprint 1 — submit WhatsApp templates to Meta via AiSensy dashboard (manual task, not Claude Code)**
+**End of Sprint 1 — submit WhatsApp templates to Meta via Meta Business Suite (manual task, not Claude Code)**
 
 ### Sprint 1 Checklist
 - [ ] All 16 database tables created with RLS
@@ -204,9 +205,9 @@ Fix any issues found during testing."
 ```
 "Read docs/architecture/MESSAGE_PIPELINE.md completely. Build the webhook handler:
 - POST /api/webhooks/whatsapp/route.ts
-- Verify AiSensy webhook signature using AISENSY_WEBHOOK_SECRET
+- Verify Meta webhook signature using X-Hub-Signature-256 header against META_WHATSAPP_APP_SECRET (HMAC-SHA256)
 - Acknowledge with 200 response immediately (< 1 second)
-- Parse message payload (text, interactive button, list reply)
+- Parse message payload — Meta Cloud API format: entry[].changes[].value.messages[] (text, interactive button, list reply)
 - Lookup organization by sender phone number from organizations table
 - Log raw message to whatsapp_messages table
 - Check if message is triggered (button tap, /prefix, reply to bot)
@@ -260,14 +261,15 @@ Also build src/lib/ai/model-router.ts:
 
 ### Week 4: Guided Prompts + End-to-End
 
-**Session 5: AiSensy Response Client (1-2 hours)**
+**Session 5: Meta Cloud API Client (1-2 hours)**
 ```
-"Build src/lib/whatsapp/aisensy.ts:
-- sendTextMessage(phone, text)
-- sendQuickReplyButtons(phone, body, buttons[]) — max 3 buttons
-- sendListMessage(phone, body, sections[]) — max 10 items
-- sendTemplateMessage(phone, templateName, variables[])
-- All functions: handle AiSensy API response, retry on failure, log to whatsapp_messages"
+"Build src/lib/whatsapp/meta-cloud-api.ts:
+- sendTextMessage(phone, text) — POST to graph.facebook.com/v21.0/{PHONE_NUMBER_ID}/messages
+- sendQuickReplyButtons(phone, body, buttons[]) — interactive message type 'button', max 3 buttons
+- sendListMessage(phone, body, sections[]) — interactive message type 'list', max 10 items
+- sendTemplateMessage(phone, templateName, languageCode, components[])
+- All functions: use META_WHATSAPP_ACCESS_TOKEN as Bearer token, retry on failure, log to whatsapp_messages
+- Handle Meta API error responses (error.code, error.error_subcode) with specific error messages"
 ```
 
 **Session 6: Interactive Message Builders (2 hours)**
@@ -291,14 +293,13 @@ All builders respect org tier — don't show tier_2 features to tier_1 orgs."
 - Step 3: If text → call DeepSeek API for intent + extraction
 - Step 4: Call eval gate
 - Step 5: Route based on score
-- Step 6: Send response via AiSensy
+- Step 6: Send response via Meta Cloud API (graph.facebook.com)
 Include error handling nodes and Sentry error reporting."
 ```
 
 **Session 8: End-to-End Test (2 hours)**
 ```
-"Set up AiSensy Coexistence with a test WhatsApp number.
-Connect webhook to local development (use ngrok for tunnel).
+"Set up Dualhook with a test WhatsApp number via Embedded Signup. Configure Webhook Override to point to your ngrok tunnel URL. Verify Meta webhook verification handshake (GET request with hub.verify_token).
 Test the complete flow:
 1. Send 'menu' → verify guided prompt menu appears
 2. Tap 'Orders' → verify sub-menu appears
@@ -313,7 +314,7 @@ Test the complete flow:
 - [ ] Eval gate scoring and routing by threshold
 - [ ] Fuzzy matching against master data
 - [ ] Guided prompt menu showing on WhatsApp
-- [ ] End-to-end: text → AI → confirmation → response
+- [ ] End-to-end: text → Meta webhook → AI → confirmation → Cloud API response
 - [ ] n8n workflow exported and deployed
 
 ---

@@ -34,7 +34,7 @@ export type WhatsAppInboundMessage =
   | WhatsAppTextMessage
   | WhatsAppInteractiveReply
 
-export interface AiSensyWebhookPayload {
+export interface MetaWebhookPayload {
   object: string
   entry: Array<{
     id: string

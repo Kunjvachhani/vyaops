@@ -93,9 +93,19 @@ Do these NOW (some take days for verification):
    - Add SSH key from your Mac: cat ~/.ssh/id_rsa.pub (create one if needed)
    - Note the server IP address
 
-5. AiSensy (aisensy.com) → sign up
-   - Explore their docs on WhatsApp Coexistence
-   - You'll set up Coexistence in Sprint 2
+5. Dualhook (dualhook.com) → sign up
+   - Start with Developer plan ($12/mo, 1 connection) for development
+   - 30-day free trial available
+   - You'll set up Coexistence + Webhook Override in Sprint 2
+
+5b. Meta Business Suite → set up WhatsApp Business Account
+   - Go to business.facebook.com → create Business Portfolio if needed
+   - Go to WhatsApp Manager → you'll connect your number via Dualhook's Embedded Signup in Sprint 2
+   - Generate permanent access token → save as META_WHATSAPP_ACCESS_TOKEN
+   - Note Phone Number ID → save as META_WHATSAPP_PHONE_NUMBER_ID
+   - Note Business Account ID → save as META_WHATSAPP_BUSINESS_ACCOUNT_ID
+   - Create App Secret → save as META_WHATSAPP_APP_SECRET
+   - Choose a verify token string → save as META_WHATSAPP_VERIFY_TOKEN
 
 6. OpenRouter (openrouter.ai) → sign up, add credits ($10 to start)
    - Create API key → save as OPENROUTER_API_KEY
@@ -342,7 +352,7 @@ git add . && git commit -m "feat: complete sprint 1 — database, auth, layout"
 git push
 ```
 
-**Manual task (not Claude Code):** Go to AiSensy dashboard and submit all 11 WhatsApp message templates from docs/whatsapp/TEMPLATES.md. Submit in English, Hindi, and Gujarati.
+**Manual task (not Claude Code):** Go to Meta Business Suite → WhatsApp Manager → Message Templates. Submit all 11 templates from docs/whatsapp/TEMPLATES.md in English, Hindi, and Gujarati. Approval typically takes 1-24 hours.
 
 ---
 
@@ -355,7 +365,7 @@ git push
 # Install ngrok (tunnels local dev to public URL for webhook testing)
 brew install ngrok
 ngrok http 3000
-# Copy the https://xxx.ngrok.io URL → use as webhook URL in AiSensy
+# Copy the https://xxx.ngrok.io URL → configure as Webhook Override URL in Dualhook dashboard
 ```
 
 ---
@@ -455,10 +465,12 @@ Check Vercel deployment logs. Copy the error.
 Tell Claude Code: "Vercel build failed with: [paste error]. Fix it."
 
 ### "WhatsApp webhook not receiving messages"
-1. Check ngrok is running and URL matches AiSensy webhook config
-2. Check AiSensy dashboard for delivery status
-3. Check your API route has correct signature verification
-4. Tell Claude Code: "The webhook at /api/webhooks/whatsapp isn't receiving. Here's what I see: [describe]"
+1. Check ngrok is running and URL matches Dualhook Webhook Override config
+2. Verify Meta webhook verification: your API route must handle GET requests
+   and return hub.challenge when hub.verify_token matches META_WHATSAPP_VERIFY_TOKEN
+3. Check Meta Business Suite → WhatsApp Manager → API Setup for webhook status
+4. Verify X-Hub-Signature-256 validation is using the correct META_WHATSAPP_APP_SECRET
+5. Tell Claude Code: "The webhook at /api/webhooks/whatsapp isn't receiving. Here's what I see: [describe]"
 
 ### "AI extraction is wrong"
 This is expected — that's what the eval loop fixes. Add the incorrect extraction as a new test case in tests/ai/benchmark.json. Over time, accuracy improves.
@@ -474,7 +486,8 @@ This is expected — that's what the eval loop fixes. Add the incorrect extracti
 | Hetzner CX22 | €4.35 (~₹400) | Month 1 onward (for n8n) |
 | DeepSeek API | ~₹500 | Month 1 onward (testing) |
 | OpenRouter API (Qwen 3.7 Max) | ~₹500 | Month 2 onward (testing) |
-| AiSensy | ₹0-999 | Free tier for testing, paid when live |
+| Dualhook | ~₹1,000 ($12) | Month 1 onward (Developer plan, 30-day free trial) |
+| Meta WhatsApp fees | ~₹100-500 | Month 2 onward (per-message, testing volume) |
 | Domain | ~₹800/year | Once |
 | Vercel | $0-20 | Free tier during dev, Pro when live |
 | ngrok | $0 | Free tier sufficient |

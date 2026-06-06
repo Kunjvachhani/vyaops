@@ -62,7 +62,7 @@ PR opened → TypeScript check + ESLint + unit tests
 ```
 
 ## Webhook Security
-- AiSensy: verify X-Hub-Signature header with AISENSY_WEBHOOK_SECRET
+- Meta Cloud API: verify X-Hub-Signature-256 header with META_WHATSAPP_APP_SECRET (HMAC-SHA256)
 - Razorpay: verify X-Razorpay-Signature with RAZORPAY_WEBHOOK_SECRET
 - REJECT any webhook that fails signature verification
 - Log all rejected webhooks to Sentry for monitoring
