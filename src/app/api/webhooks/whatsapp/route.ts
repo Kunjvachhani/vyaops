@@ -149,26 +149,16 @@ export async function POST(request: NextRequest): Promise<Response> {
     return new Response('Bad Request', { status: 400 })
   }
 
+  // TEMP DEBUG — log all headers
+  const headers: Record<string, string> = {}
+  request.headers.forEach((value, key) => { headers[key] = value })
+  console.log('[whatsapp] incoming headers:', JSON.stringify(headers))
+  console.log('[whatsapp] signature header:', request.headers.get('x-hub-signature-256'))
+
   if (!verifySignature(rawBody, request.headers.get('x-hub-signature-256'))) {
     console.error('[whatsapp] HMAC-SHA256 signature verification failed — rejecting webhook')
     return new Response('Unauthorized', { status: 401 })
   }
-
-  let payload: MetaWebhookPayload
-  try {
-    payload = JSON.parse(rawBody) as MetaWebhookPayload
-  } catch {
-    return new Response('Bad Request', { status: 400 })
-  }
-
-  if (payload.object !== 'whatsapp_business_account') {
-    return new Response('', { status: 200 })
-  }
-
-  // Acknowledge < 1s; process asynchronously after response is sent
-  after(async () => {
-    await processWebhookPayload(payload)
-  })
 
   return new Response('', { status: 200 })
 }
