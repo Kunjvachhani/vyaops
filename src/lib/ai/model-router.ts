@@ -1,6 +1,7 @@
 import { callDeepSeek, classifyIntent, extractEntities, CLASSIFY_SYSTEM_PROMPT } from './deepseek'
 import { callOpenRouter } from './openrouter'
 import { evaluateExtraction, routeByScore } from './eval-gate'
+import { matchCustomer, matchProduct } from '@/lib/utils/fuzzy-match'
 import { DeepSeekClassifyResponseSchema } from '@/types/ai'
 import type {
   AIRequest,
@@ -8,8 +9,10 @@ import type {
   ModelRouterDecision,
   OrgContext,
   IntentResult,
+  IntentType,
   EntityResult,
   ExtractedEntity,
+  EvalGateDecision,
   RouteAndProcessResult,
   EvaluateExtractionResult,
 } from '@/types/ai'
@@ -171,6 +174,87 @@ function buildFallbackEvalResult(): EvaluateExtractionResult {
   }
 }
 
+// Decision severity ordering. Used to CAP (downgrade) routing — never to escalate.
+const DECISION_RANK: Record<EvalGateDecision, number> = {
+  reject_show_menu: 0,
+  clarify: 1,
+  confirm: 2,
+  auto_process: 3,
+}
+
+function capDecision(decision: EvalGateDecision, max: EvalGateDecision): EvalGateDecision {
+  return DECISION_RANK[decision] > DECISION_RANK[max] ? max : decision
+}
+
+// Order intents require a resolved counterparty (+ product) before we ever
+// auto-process or confirm. Sales orders need a customer; purchases need a vendor.
+const CUSTOMER_ORDER_INTENTS = new Set<IntentType>(['NEW_ORDER'])
+const VENDOR_ORDER_INTENTS = new Set<IntentType>(['VENDOR_ORDER'])
+
+type ResolutionFlags = {
+  customerResolved: boolean
+  productResolved: boolean
+  hasVendor: boolean
+}
+
+// Layer 4 of the Data Alignment Engine: resolve raw customer/product names
+// against master data via fuzzy matching, annotating each entity in place with
+// the canonical name (normalizedValue) and the match confidence. Failures leave
+// the entity unresolved so the safety gate holds the message for confirmation.
+async function resolveEntities(orgId: string, entities: EntityResult): Promise<ResolutionFlags> {
+  const customer = entities.entities.find((e) => e.type === 'customer_name')
+  const product = entities.entities.find((e) => e.type === 'product_name')
+  const hasVendor = entities.entities.some((e) => e.type === 'vendor_name')
+
+  let customerResolved = false
+  let productResolved = false
+
+  if (customer) {
+    try {
+      const m = await matchCustomer(orgId, customer.rawValue)
+      customer.confidence = m.confidence
+      if (m.match) {
+        customer.normalizedValue = m.match.name
+        customerResolved = true
+      }
+    } catch {
+      // matcher/DB failure — leave unresolved; the gate downgrades to 'clarify'
+    }
+  }
+
+  if (product) {
+    try {
+      const m = await matchProduct(orgId, product.rawValue)
+      product.confidence = m.confidence
+      if (m.match) {
+        product.normalizedValue = m.match.name
+        productResolved = true
+      }
+    } catch {
+      // leave unresolved
+    }
+  }
+
+  return { customerResolved, productResolved, hasVendor }
+}
+
+// Deterministic safety gate over the eval-gate's decision. An order can only
+// reach 'confirm'/'auto_process' when its required entities actually resolved —
+// regardless of how generously the eval LLM scored the extraction.
+function applyOrderSafetyGate(
+  intent: IntentType,
+  decision: EvalGateDecision,
+  resolution: ResolutionFlags
+): EvalGateDecision {
+  if (CUSTOMER_ORDER_INTENTS.has(intent) && (!resolution.customerResolved || !resolution.productResolved)) {
+    return capDecision(decision, 'clarify')
+  }
+  if (VENDOR_ORDER_INTENTS.has(intent) && (!resolution.hasVendor || !resolution.productResolved)) {
+    return capDecision(decision, 'clarify')
+  }
+  return decision
+}
+
 export async function routeAndProcess(
   message: string,
   orgContext: OrgContext
@@ -210,7 +294,12 @@ export async function routeAndProcess(
     }
   }
 
-  // Step 3: run eval gate (always Qwen, always cross-model from DeepSeek generator)
+  // Step 2b: Layer 4 — resolve names to master data (annotates entities in place)
+  const resolution = await resolveEntities(orgContext.orgId, entities)
+
+  // Step 3: run eval gate (always Qwen, always cross-model from DeepSeek generator).
+  // Entities now carry normalizedValue, so the evaluator scores match_confidence
+  // against the resolved canonical names instead of the raw extracted text.
   let evalResult: EvaluateExtractionResult
 
   try {
@@ -225,8 +314,12 @@ export async function routeAndProcess(
     evalResult = buildFallbackEvalResult()
   }
 
+  // Step 4: deterministic safety gate. Orders missing a resolved counterparty or
+  // product can never auto-process/confirm, no matter the eval score.
+  const decision = applyOrderSafetyGate(intent.intent, evalResult.decision, resolution)
+
   return {
-    decision: evalResult.decision,
+    decision,
     intent,
     entities,
     evalResult,

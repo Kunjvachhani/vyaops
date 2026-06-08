@@ -44,6 +44,52 @@ function extractMessageBody(msg: WhatsAppInboundMessage): string | null {
   return null
 }
 
+// Maps a Meta inbound message to the n8n forward contract's messageType plus
+// the selection ids the guided-flow branch parses.
+type N8nMessageShape = {
+  messageType: 'text' | 'button_reply' | 'list_reply'
+  buttonReply?: { id: string; title: string }
+  listReply?: { rowId: string; title: string }
+}
+
+function toN8nMessageShape(msg: WhatsAppInboundMessage): N8nMessageShape {
+  if (msg.type === 'interactive') {
+    const ia = msg.interactive
+    if (ia.type === 'button_reply') {
+      return { messageType: 'button_reply', buttonReply: { id: ia.button_reply.id, title: ia.button_reply.title } }
+    }
+    if (ia.type === 'list_reply') {
+      return { messageType: 'list_reply', listReply: { rowId: ia.list_reply.id, title: ia.list_reply.title } }
+    }
+  }
+  if (msg.type === 'button') {
+    return { messageType: 'button_reply', buttonReply: { id: msg.button.payload, title: msg.button.text } }
+  }
+  return { messageType: 'text' }
+}
+
+// Forwards the normalized message to the n8n master handler. Fire-and-forget:
+// a forwarding failure must never break inbound acknowledgement.
+async function forwardToN8n(payload: Record<string, unknown>): Promise<void> {
+  const url = process.env.N8N_WEBHOOK_URL
+  if (!url) {
+    console.warn('[whatsapp] N8N_WEBHOOK_URL not set — skipping forward')
+    return
+  }
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-api-key': process.env.INTERNAL_API_KEY ?? '',
+      },
+      body: JSON.stringify(payload),
+    })
+  } catch (err) {
+    console.error('[whatsapp] failed to forward to n8n:', err instanceof Error ? err.message : String(err))
+  }
+}
+
 async function processStatusUpdates(statuses: WhatsAppStatusUpdate[]): Promise<void> {
   for (const status of statuses) {
     console.log('[whatsapp] delivery status:', status.status, 'for', maskPhone(status.recipient_id))
@@ -89,18 +135,25 @@ async function processInboundMessage(msg: WhatsAppInboundMessage): Promise<void>
       })
     }
 
-    if (!triggered) {
-      // Silent classification: log for analytics, never respond
-      console.log('[whatsapp] non-triggered message from:', maskedPhone, '— staying silent')
-      return
-    }
-
-    // Triggered: extract intent + entities → route to AI processing
-    console.log('[whatsapp] triggered message from:', maskedPhone, '— routing to AI', {
-      org_id: org.id,
-      type: msg.type,
+    // Forward every message to the n8n master handler. n8n routes by
+    // (messageType, isTriggered): guided flow, AI flow, or Branch C log-only.
+    // Non-triggered messages are forwarded too (n8n logs them, sends no reply).
+    const shape = toN8nMessageShape(msg)
+    await forwardToN8n({
+      message: messageBody ?? '',
+      sender: msg.from,
+      orgId: org.id,
+      messageType: shape.messageType,
+      isTriggered: triggered,
+      ...(shape.buttonReply ? { buttonReply: shape.buttonReply } : {}),
+      ...(shape.listReply ? { listReply: shape.listReply } : {}),
     })
-    // TODO: await routeToAI(msg, org) — model-router + eval-gate pipeline
+
+    console.log('[whatsapp] forwarded to n8n:', maskedPhone, {
+      org_id: org.id,
+      type: shape.messageType,
+      triggered,
+    })
   } catch (err) {
     console.error('[whatsapp] unhandled error processing message:', {
       phone: maskedPhone,

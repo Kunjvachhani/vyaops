@@ -285,37 +285,67 @@ All builders respect org tier — don't show tier_2 features to tier_1 orgs."
 ```
 
 **Session 7: n8n Workflow — Message Handler (2-3 hours)**
+
+> **Architecture: n8n is orchestration-only, proxied through Next.js (Option B).**
+> n8n never calls Meta or DeepSeek directly — it calls back into Next.js API
+> routes, so all sends/AI/writes flow through one audited, credential-holding
+> layer. n8n holds only `APP_URL` + `INTERNAL_API_KEY`. See `docs/infrastructure/N8N_PIPELINE.md`.
+
 ```
-"Build the master n8n workflow as a JSON file in n8n/workflows/:
-- Trigger: webhook (receives from our API route, which forwards to n8n)
-- Step 1: Parse incoming message type (text, button reply, list reply)
-- Step 2: If button/list → route to specific sub-workflow (order, invoice, etc.)
-- Step 3: If text → call DeepSeek API for intent + extraction
-- Step 4: Call eval gate
-- Step 5: Route based on score
-- Step 6: Send response via Meta Cloud API (graph.facebook.com)
-Include error handling nodes and Sentry error reporting."
+"Build the master n8n workflow as a JSON file in n8n/workflows/master-message-handler.json:
+- Trigger: webhook (receives the forwarded {message, sender, orgId, messageType, isTriggered})
+- ROUTER (Switch): button_reply/list_reply → Branch A; text & isTriggered → Branch B; !isTriggered → Branch C
+- Branch A (guided): parse selection id, switch on prefix → call /api/whatsapp/menu,
+  /api/session/store, or /api/orders; send via /api/whatsapp/send
+- Branch B (AI): POST /api/ai → switch on returned decision
+  (auto_process | confirm | clarify | reject_show_menu) → /api/orders + /api/whatsapp/send
+- Branch C (log-only): POST /api/analytics/log-intent — no reply
+- Error Trigger: POST /api/errors/log → send 'something went wrong' via /api/whatsapp/send
+Every HTTP node sends the x-internal-api-key header ($env.INTERNAL_API_KEY)."
 ```
 
+Also build the Next.js callback routes the workflow targets:
+- `/api/ai` — classify → fuzzy-resolve (Layer 4) → eval gate → routing decision
+- `/api/whatsapp/send` — forward a built Meta message body to the Cloud API
+- `/api/whatsapp/menu` — build main/sub menu (return for two-step, or send directly)
+- `/api/session/store` — persist guided-flow state to `whatsapp_sessions`
+- `/api/analytics/log-intent` — PostHog capture (privacy-safe, no raw body/phone)
+- `/api/errors/log` — structured error sink (Sentry hook point)
+All guarded by `requireInternalAuth` (`src/lib/utils/internal-auth.ts`).
+
 **Session 8: End-to-End Test (2 hours)**
+
+Automated test scripts (run before any live WhatsApp testing):
+- `npm run test:ai` (`scripts/test-ai-pipeline.ts`) — drives classify → fuzzy
+  resolve → eval → route against the seeded org. Asserts intents, fuzzy matches
+  (Rajubhai → Rajesh Patel), and the safety gate (no-customer order never
+  auto-processes).
+- `npm run test:webhook` (`scripts/test-webhook.ts`) — fires the 4 inbound cases
+  at the live n8n webhook and reports per-branch execution status via the n8n API.
+
 ```
-"Set up Dualhook with a test WhatsApp number via Embedded Signup. Configure Webhook Override to point to your ngrok tunnel URL. Verify Meta webhook verification handshake (GET request with hub.verify_token).
+"Set up Dualhook with a test WhatsApp number via Embedded Signup. Configure Webhook Override to point to your ngrok tunnel URL (or deployed Vercel URL). Verify Meta webhook verification handshake (GET request with hub.verify_token).
 Test the complete flow:
-1. Send 'menu' → verify guided prompt menu appears
+1. Send '/menu' → verify guided prompt menu appears
 2. Tap 'Orders' → verify sub-menu appears
 3. Type 'rajubhai no order 500 piece valve body' → verify AI processes correctly
 4. Verify eval gate scores and routes correctly
 5. Fix any issues in the pipeline."
 ```
 
+**Note:** the n8n callbacks hit `$env.APP_URL`. For local testing point APP_URL at
+your tunnel; in production it is the Vercel URL (auto-deployed on push).
+
 ### Sprint 2 Checklist
-- [ ] Webhook receiving and verifying messages
+- [ ] Webhook receiving, verifying, and forwarding messages to n8n
 - [ ] DeepSeek classifying intents (>80% accuracy on test messages)
 - [ ] Eval gate scoring and routing by threshold
-- [ ] Fuzzy matching against master data
+- [ ] Fuzzy matching wired into the pipeline (Layer 4) + order safety gate
+- [ ] Next.js callback routes built (`/api/ai`, `/api/whatsapp/{send,menu}`, `/api/session/store`, `/api/analytics/log-intent`, `/api/errors/log`)
+- [ ] `whatsapp_sessions` table (migration + types) for guided-flow state
 - [ ] Guided prompt menu showing on WhatsApp
-- [ ] End-to-end: text → Meta webhook → AI → confirmation → Cloud API response
-- [ ] n8n workflow exported and deployed
+- [ ] End-to-end: text → Meta webhook → n8n → /api/ai → /api/whatsapp/send → Cloud API
+- [ ] n8n workflow imported + active; `APP_URL` + `INTERNAL_API_KEY` set in n8n
 
 ---
 

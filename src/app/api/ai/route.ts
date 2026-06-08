@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { adminClient } from '@/lib/supabase/admin'
 import { routeAndProcess } from '@/lib/ai/model-router'
+import { requireInternalAuth } from '@/lib/utils/internal-auth'
 
 const RequestSchema = z.object({
   message: z.string().min(1).max(4096),
@@ -9,13 +10,8 @@ const RequestSchema = z.object({
 })
 
 export async function POST(request: NextRequest) {
-  const internalKey = request.headers.get('x-internal-api-key')
-  if (!internalKey || internalKey !== process.env.INTERNAL_API_KEY) {
-    return NextResponse.json(
-      { error: 'Unauthorized', code: 'AUTH_ERROR' },
-      { status: 401 }
-    )
-  }
+  const unauthorized = requireInternalAuth(request)
+  if (unauthorized) return unauthorized
 
   let body: unknown
   try {
