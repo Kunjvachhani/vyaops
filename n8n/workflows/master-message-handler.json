@@ -1,0 +1,810 @@
+{
+  "name": "VyaOps — Master Message Handler",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodes": [
+    {
+      "id": "node-01-webhook",
+      "name": "WhatsApp Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "vyaops-whatsapp-handler",
+      "parameters": {
+        "path": "whatsapp-message",
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "responseCode": 200,
+        "options": {}
+      },
+      "notes": "Receives forwarded POST from /api/webhooks/whatsapp. Payload: { message, sender, orgId, messageType, isTriggered, buttonReply?, listReply? }"
+    },
+
+    {
+      "id": "node-02-router",
+      "name": "Message Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [500, 300],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "Guided Flow",
+              "conditions": {
+                "options": { "caseSensitive": true },
+                "conditions": [
+                  {
+                    "id": "r0c0",
+                    "leftValue": "={{ $json.body.messageType }}",
+                    "rightValue": "button_reply",
+                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
+                  },
+                  {
+                    "id": "r0c1",
+                    "leftValue": "={{ $json.body.messageType }}",
+                    "rightValue": "list_reply",
+                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true
+            },
+            {
+              "outputKey": "AI Flow",
+              "conditions": {
+                "options": { "caseSensitive": true },
+                "conditions": [
+                  {
+                    "id": "r1c0",
+                    "leftValue": "={{ $json.body.messageType }}",
+                    "rightValue": "text",
+                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
+                  },
+                  {
+                    "id": "r1c1",
+                    "leftValue": "={{ $json.body.isTriggered }}",
+                    "rightValue": true,
+                    "operator": { "type": "boolean", "operation": "equals", "name": "filter.operator.equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true
+            },
+            {
+              "outputKey": "Log Only",
+              "conditions": {
+                "options": { "caseSensitive": true },
+                "conditions": [
+                  {
+                    "id": "r2c0",
+                    "leftValue": "={{ $json.body.isTriggered }}",
+                    "rightValue": false,
+                    "operator": { "type": "boolean", "operation": "equals", "name": "filter.operator.equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      }
+    },
+
+    {
+      "id": "node-03-parse",
+      "name": "Parse Selection ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [750, -200],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const body = $input.item.json.body;\nconst buttonId = body?.buttonReply?.id ?? '';\nconst listId = body?.listReply?.rowId ?? '';\nconst selectionId = buttonId || listId;\nconst underscoreIdx = selectionId.indexOf('_');\nconst selectionPrefix = underscoreIdx >= 0\n  ? selectionId.substring(0, underscoreIdx + 1)\n  : selectionId;\nreturn {\n  json: {\n    ...$input.item.json,\n    selectionId,\n    selectionPrefix,\n  }\n};"
+      }
+    },
+
+    {
+      "id": "node-04-action-router",
+      "name": "Action Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1000, -200],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "Menu Navigation",
+              "conditions": {
+                "options": { "caseSensitive": true },
+                "conditions": [
+                  {
+                    "id": "ar0c0",
+                    "leftValue": "={{ $json.selectionPrefix }}",
+                    "rightValue": "menu_",
+                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true
+            },
+            {
+              "outputKey": "Customer Selection",
+              "conditions": {
+                "options": { "caseSensitive": true },
+                "conditions": [
+                  {
+                    "id": "ar1c0",
+                    "leftValue": "={{ $json.selectionPrefix }}",
+                    "rightValue": "customer_",
+                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true
+            },
+            {
+              "outputKey": "Product Selection",
+              "conditions": {
+                "options": { "caseSensitive": true },
+                "conditions": [
+                  {
+                    "id": "ar2c0",
+                    "leftValue": "={{ $json.selectionPrefix }}",
+                    "rightValue": "product_",
+                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true
+            },
+            {
+              "outputKey": "Order Confirmation",
+              "conditions": {
+                "options": { "caseSensitive": true },
+                "conditions": [
+                  {
+                    "id": "ar3c0",
+                    "leftValue": "={{ $json.selectionPrefix }}",
+                    "rightValue": "confirm_",
+                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true
+            },
+            {
+              "outputKey": "Cancellation",
+              "conditions": {
+                "options": { "caseSensitive": true },
+                "conditions": [
+                  {
+                    "id": "ar4c0",
+                    "leftValue": "={{ $json.selectionPrefix }}",
+                    "rightValue": "cancel_",
+                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      }
+    },
+
+    {
+      "id": "node-05-get-submenu",
+      "name": "Get SubMenu",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, -600],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/whatsapp/menu",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ menuId: $json.selectionId, orgId: $json.body.orgId, sender: $json.body.sender }) }}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 1000
+          }
+        }
+      }
+    },
+
+    {
+      "id": "node-06-send-submenu",
+      "name": "Send SubMenu WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1500, -600],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/whatsapp/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $('WhatsApp Webhook').first().json.body.sender, type: 'interactive', interactive: $json.interactive }) }}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 1000
+          }
+        }
+      }
+    },
+
+    {
+      "id": "node-07-store-customer",
+      "name": "Store Customer Selection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, -450],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/session/store",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sender: $json.body.sender, orgId: $json.body.orgId, key: 'selected_customer_id', value: $json.selectionId.replace('customer_', '') }) }}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 1000
+          }
+        }
+      },
+      "notes": "Stores customer selection in session, then Next.js API returns product list via Send SubMenu WhatsApp"
+    },
+
+    {
+      "id": "node-08-store-product",
+      "name": "Store Product Selection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, -300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/session/store",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sender: $json.body.sender, orgId: $json.body.orgId, key: 'selected_product_id', value: $json.selectionId.replace('product_', '') }) }}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 1000
+          }
+        }
+      },
+      "notes": "Stores product selection in session, then Next.js API sends quantity prompt"
+    },
+
+    {
+      "id": "node-09-create-order-guided",
+      "name": "Create Order Guided",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, -150],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/orders",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source: 'whatsapp_guided', confirmId: $json.selectionId, orgId: $json.body.orgId, sender: $json.body.sender }) }}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 1000
+          }
+        }
+      }
+    },
+
+    {
+      "id": "node-10-send-cancellation",
+      "name": "Send Cancellation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, 0],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/whatsapp/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.body.sender, type: 'text', text: { body: 'Order cancelled. Type VYAOPS to restart.' } }) }}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 1000
+          }
+        }
+      }
+    },
+
+    {
+      "id": "node-11-ai-classify",
+      "name": "AI Classify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [750, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/ai",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ message: $json.body.message, orgId: $json.body.orgId }) }}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 1000
+          },
+          "timeout": 30000
+        }
+      }
+    },
+
+    {
+      "id": "node-12-ai-decision-router",
+      "name": "AI Decision Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1000, 300],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "Auto Process",
+              "conditions": {
+                "options": { "caseSensitive": true },
+                "conditions": [
+                  {
+                    "id": "dr0c0",
+                    "leftValue": "={{ $json.decision }}",
+                    "rightValue": "auto_process",
+                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true
+            },
+            {
+              "outputKey": "Confirm",
+              "conditions": {
+                "options": { "caseSensitive": true },
+                "conditions": [
+                  {
+                    "id": "dr1c0",
+                    "leftValue": "={{ $json.decision }}",
+                    "rightValue": "confirm",
+                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true
+            },
+            {
+              "outputKey": "Clarify",
+              "conditions": {
+                "options": { "caseSensitive": true },
+                "conditions": [
+                  {
+                    "id": "dr2c0",
+                    "leftValue": "={{ $json.decision }}",
+                    "rightValue": "clarify",
+                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true
+            },
+            {
+              "outputKey": "Reject Show Menu",
+              "conditions": {
+                "options": { "caseSensitive": true },
+                "conditions": [
+                  {
+                    "id": "dr3c0",
+                    "leftValue": "={{ $json.decision }}",
+                    "rightValue": "reject_show_menu",
+                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      }
+    },
+
+    {
+      "id": "node-13-create-order-ai",
+      "name": "Create Order AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, 150],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/orders",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source: 'whatsapp_ai', orgId: $('WhatsApp Webhook').first().json.body.orgId, sender: $('WhatsApp Webhook').first().json.body.sender, extraction: $('AI Classify').first().json.extraction }) }}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 1000
+          }
+        }
+      }
+    },
+
+    {
+      "id": "node-14-send-confirmation-template",
+      "name": "Send Order Confirmation Template",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1500, 150],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/whatsapp/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $('WhatsApp Webhook').first().json.body.sender, type: 'template', template: { name: 'order_confirmed', language: { code: 'en' }, components: [{ type: 'body', parameters: [{ type: 'text', text: $json.orderNumber ?? '' }] }] } }) }}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 1000
+          }
+        }
+      }
+    },
+
+    {
+      "id": "node-15-send-confirm-buttons",
+      "name": "Send Confirm Buttons",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/whatsapp/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $('WhatsApp Webhook').first().json.body.sender, type: 'interactive', interactive: { type: 'button', body: { text: 'Order summary:\\n' + JSON.stringify($('AI Classify').first().json.extraction?.entities ?? {}, null, 2) + '\\n\\nConfirm this order?' }, action: { buttons: [{ type: 'reply', reply: { id: 'confirm_' + $('AI Classify').first().json.extraction?.intent?.rawMessage?.slice(0, 20), title: '✅ Confirm' } }, { type: 'reply', reply: { id: 'cancel_ai', title: '❌ Cancel' } }] } } }) }}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 1000
+          }
+        }
+      }
+    },
+
+    {
+      "id": "node-16-send-clarification",
+      "name": "Send Clarification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, 450],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/whatsapp/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $('WhatsApp Webhook').first().json.body.sender, type: 'text', text: { body: 'I need a bit more info:\\n' + ($('AI Classify').first().json.scores?.reasoning ?? 'Could you clarify your request?') } }) }}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 1000
+          }
+        }
+      }
+    },
+
+    {
+      "id": "node-17-send-main-menu",
+      "name": "Send Main Menu",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, 600],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/whatsapp/menu",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ menuId: 'menu_main', orgId: $('WhatsApp Webhook').first().json.body.orgId, sender: $('WhatsApp Webhook').first().json.body.sender, sendDirect: true }) }}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 1000
+          }
+        }
+      }
+    },
+
+    {
+      "id": "node-18-log-intent",
+      "name": "Log Intent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [750, 750],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/analytics/log-intent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ orgId: $json.body.orgId, sender: $json.body.sender, message: $json.body.message, messageType: $json.body.messageType, isTriggered: $json.body.isTriggered, timestamp: new Date().toISOString() }) }}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 2,
+            "waitBetweenTries": 1000
+          }
+        }
+      },
+      "notes": "Analytics only — no WhatsApp reply is sent for non-triggered messages"
+    },
+
+    {
+      "id": "node-19-error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [250, 1000],
+      "parameters": {},
+      "notes": "Configure: set this workflow as the error workflow for itself in Settings > Error Workflow"
+    },
+
+    {
+      "id": "node-20-log-error",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [500, 1000],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/errors/log",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source: 'n8n_master_handler', error: $json.error?.message, workflow: $json.workflow?.name, node: $json.execution?.lastNodeExecuted, executionId: $json.execution?.id, timestamp: new Date().toISOString() }) }}",
+        "options": {}
+      }
+    },
+
+    {
+      "id": "node-21-send-error-message",
+      "name": "Send Error Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [750, 1000],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/whatsapp/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.execution?.data?.resultData?.runData?.['WhatsApp Webhook']?.[0]?.data?.main?.[0]?.[0]?.json?.body?.sender ?? '', type: 'text', text: { body: 'માફ કરશો, કંઈક ગડબડ થઈ ગઈ. (Sorry, something went wrong. Please try again.)' } }) }}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    }
+  ],
+
+  "connections": {
+    "WhatsApp Webhook": {
+      "main": [
+        [{ "node": "Message Router", "type": "main", "index": 0 }]
+      ]
+    },
+    "Message Router": {
+      "main": [
+        [{ "node": "Parse Selection ID", "type": "main", "index": 0 }],
+        [{ "node": "AI Classify", "type": "main", "index": 0 }],
+        [{ "node": "Log Intent", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Selection ID": {
+      "main": [
+        [{ "node": "Action Router", "type": "main", "index": 0 }]
+      ]
+    },
+    "Action Router": {
+      "main": [
+        [{ "node": "Get SubMenu", "type": "main", "index": 0 }],
+        [{ "node": "Store Customer Selection", "type": "main", "index": 0 }],
+        [{ "node": "Store Product Selection", "type": "main", "index": 0 }],
+        [{ "node": "Create Order Guided", "type": "main", "index": 0 }],
+        [{ "node": "Send Cancellation", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get SubMenu": {
+      "main": [
+        [{ "node": "Send SubMenu WhatsApp", "type": "main", "index": 0 }]
+      ]
+    },
+    "AI Classify": {
+      "main": [
+        [{ "node": "AI Decision Router", "type": "main", "index": 0 }]
+      ]
+    },
+    "AI Decision Router": {
+      "main": [
+        [{ "node": "Create Order AI", "type": "main", "index": 0 }],
+        [{ "node": "Send Confirm Buttons", "type": "main", "index": 0 }],
+        [{ "node": "Send Clarification", "type": "main", "index": 0 }],
+        [{ "node": "Send Main Menu", "type": "main", "index": 0 }]
+      ]
+    },
+    "Create Order AI": {
+      "main": [
+        [{ "node": "Send Order Confirmation Template", "type": "main", "index": 0 }]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [{ "node": "Log Error", "type": "main", "index": 0 }]
+      ]
+    },
+    "Log Error": {
+      "main": [
+        [{ "node": "Send Error Message", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "id": "vyaops-master-message-handler",
+  "tags": [
+    { "id": "vyaops", "name": "vyaops" },
+    { "id": "whatsapp", "name": "whatsapp" }
+  ],
+  "pinData": {}
+}
