@@ -1,6 +1,19 @@
 import { createHmac, timingSafeEqual } from 'crypto'
+import { adminClient } from '@/lib/supabase/admin'
+import type {
+  Button,
+  Section,
+  TemplateComponent,
+  SendResult,
+  MetaErrorResponse,
+  MessageType,
+} from '@/types/whatsapp'
 
 const GRAPH_API_BASE = 'https://graph.facebook.com/v21.0'
+const RETRY_LIMIT = 2
+const RETRY_DELAY_MS = 1000
+
+// ─── Signature verification ───────────────────────────────────────────────────
 
 export function verifyMetaSignature(
   payload: string,
@@ -11,116 +24,212 @@ export function verifyMetaSignature(
   return timingSafeEqual(Buffer.from(expected), Buffer.from(signatureHeader))
 }
 
+// ─── Core HTTP client ─────────────────────────────────────────────────────────
+
+interface MetaSuccessResponse {
+  messages: Array<{ id: string }>
+}
+
 async function callGraphApi(
-  path: string,
   body: Record<string, unknown>
-): Promise<void> {
+): Promise<{ messageId: string }> {
   const phoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID ?? ''
   const accessToken = process.env.META_WHATSAPP_ACCESS_TOKEN ?? ''
-  const url = `${GRAPH_API_BASE}/${phoneNumberId}${path}`
+  const url = `${GRAPH_API_BASE}/${phoneNumberId}/messages`
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify(body),
-  })
+  let lastError = 'Unknown error'
 
-  if (!res.ok) {
-    const data = (await res.json()) as {
-      error?: { message?: string; code?: number; error_subcode?: number }
+  for (let attempt = 0; attempt <= RETRY_LIMIT; attempt++) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS))
     }
-    const msg = data.error?.message ?? 'Unknown error'
-    const code = data.error?.code ?? res.status
-    const sub = data.error?.error_subcode
-    throw new Error(`Meta API error ${code}${sub ? `/${sub}` : ''}: ${msg}`)
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(body),
+    })
+
+    if (res.ok) {
+      const data = (await res.json()) as MetaSuccessResponse
+      return { messageId: data.messages?.[0]?.id ?? '' }
+    }
+
+    const errData = (await res.json()) as MetaErrorResponse
+    const { code, error_subcode, message } = errData.error
+    lastError = `Meta API error ${code}${error_subcode ? `/${error_subcode}` : ''}: ${message}`
+
+    // Non-retriable: permanent 4xx client errors (but retry 429 rate limits)
+    if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+      break
+    }
+  }
+
+  throw new Error(lastError)
+}
+
+// ─── DB logging ───────────────────────────────────────────────────────────────
+
+function logOutboundMessage(
+  organizationId: string,
+  phone: string,
+  messageType: MessageType,
+  messageId: string,
+  body?: string
+): void {
+  adminClient
+    .from('whatsapp_messages')
+    .insert({
+      organization_id: organizationId,
+      message_id: messageId,
+      direction: 'outbound',
+      sender_phone: phone,
+      message_type: messageType,
+      message_body: body ?? null,
+      was_triggered: false,
+      was_processed: false,
+    })
+    .then(({ error }) => {
+      if (error) {
+        console.error('[WhatsApp] Failed to log outbound message:', error)
+      }
+    })
+}
+
+// ─── Shared send + log wrapper ────────────────────────────────────────────────
+
+async function sendAndLog(
+  organizationId: string,
+  phone: string,
+  messageType: MessageType,
+  apiBody: Record<string, unknown>,
+  logBody?: string
+): Promise<SendResult> {
+  try {
+    const { messageId } = await callGraphApi(apiBody)
+    logOutboundMessage(organizationId, phone, messageType, messageId, logBody)
+    return { success: true, messageId }
+  } catch (err: unknown) {
+    const error = err instanceof Error ? err.message : 'Unknown error'
+    return { success: false, error }
   }
 }
 
+// ─── Public API ───────────────────────────────────────────────────────────────
+
 export async function sendTextMessage(
   phone: string,
-  text: string
-): Promise<void> {
-  await callGraphApi('/messages', {
-    messaging_product: 'whatsapp',
-    recipient_type: 'individual',
-    to: phone,
-    type: 'text',
-    text: { body: text },
-  })
+  text: string,
+  organizationId: string
+): Promise<SendResult> {
+  return sendAndLog(
+    organizationId,
+    phone,
+    'text',
+    {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: phone,
+      type: 'text',
+      text: { body: text },
+    },
+    text
+  )
 }
 
 export async function sendQuickReplyButtons(
   phone: string,
   body: string,
-  buttons: Array<{ id: string; title: string }>
-): Promise<void> {
-  await callGraphApi('/messages', {
-    messaging_product: 'whatsapp',
-    recipient_type: 'individual',
-    to: phone,
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      body: { text: body },
-      action: {
-        buttons: buttons.slice(0, 3).map((b) => ({
-          type: 'reply',
-          reply: { id: b.id, title: b.title },
-        })),
+  buttons: Button[],
+  organizationId: string
+): Promise<SendResult> {
+  return sendAndLog(
+    organizationId,
+    phone,
+    'interactive',
+    {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: phone,
+      type: 'interactive',
+      interactive: {
+        type: 'button',
+        body: { text: body },
+        action: {
+          buttons: buttons.slice(0, 3).map((b) => ({
+            type: 'reply',
+            reply: { id: b.id, title: b.title.slice(0, 20) },
+          })),
+        },
       },
     },
-  })
+    body
+  )
 }
 
 export async function sendListMessage(
   phone: string,
   body: string,
-  buttonLabel: string,
-  sections: Array<{
-    title: string
-    rows: Array<{ id: string; title: string; description?: string }>
-  }>
-): Promise<void> {
-  await callGraphApi('/messages', {
-    messaging_product: 'whatsapp',
-    recipient_type: 'individual',
-    to: phone,
-    type: 'interactive',
-    interactive: {
-      type: 'list',
-      body: { text: body },
-      action: {
-        button: buttonLabel,
-        sections: sections.map((s) => ({
-          title: s.title,
-          rows: s.rows.slice(0, 10),
-        })),
+  sections: Section[],
+  organizationId: string
+): Promise<SendResult> {
+  // Cap at 10 total items across all sections (WhatsApp limit)
+  let remaining = 10
+  const cappedSections: Section[] = []
+  for (const section of sections) {
+    if (remaining <= 0) break
+    const rows = section.rows.slice(0, remaining)
+    cappedSections.push({ title: section.title, rows })
+    remaining -= rows.length
+  }
+
+  return sendAndLog(
+    organizationId,
+    phone,
+    'interactive',
+    {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: phone,
+      type: 'interactive',
+      interactive: {
+        type: 'list',
+        body: { text: body },
+        action: {
+          button: 'Select',
+          sections: cappedSections,
+        },
       },
     },
-  })
+    body
+  )
 }
 
 export async function sendTemplateMessage(
   phone: string,
   templateName: string,
   languageCode: string,
-  components: Array<{
-    type: string
-    parameters: Array<{ type: string; text?: string }>
-  }>
-): Promise<void> {
-  await callGraphApi('/messages', {
-    messaging_product: 'whatsapp',
-    recipient_type: 'individual',
-    to: phone,
-    type: 'template',
-    template: {
-      name: templateName,
-      language: { code: languageCode },
-      components,
+  components: TemplateComponent[],
+  organizationId: string
+): Promise<SendResult> {
+  return sendAndLog(
+    organizationId,
+    phone,
+    'template',
+    {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: phone,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: languageCode },
+        components,
+      },
     },
-  })
+    templateName
+  )
 }

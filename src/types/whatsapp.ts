@@ -1,3 +1,86 @@
+// ─── Outbound message building blocks ────────────────────────────────────────
+
+export interface Button {
+  id: string
+  title: string // max 20 chars (WhatsApp limit)
+}
+
+export interface ListItem {
+  id: string
+  title: string
+  description?: string
+}
+
+export interface Section {
+  title: string
+  rows: ListItem[]
+}
+
+export type TemplateComponentType = 'header' | 'body' | 'button'
+export type TemplateParameterType =
+  | 'text'
+  | 'image'
+  | 'video'
+  | 'document'
+  | 'payload'
+  | 'currency'
+  | 'date_time'
+
+export interface TemplateParameter {
+  type: TemplateParameterType
+  text?: string
+  payload?: string
+}
+
+export interface TemplateComponent {
+  type: TemplateComponentType
+  sub_type?: 'quick_reply' | 'url'
+  index?: number
+  parameters: TemplateParameter[]
+}
+
+// ─── Send result ──────────────────────────────────────────────────────────────
+
+export interface SendResult {
+  success: boolean
+  messageId?: string
+  error?: string
+}
+
+// ─── Meta API error shape ─────────────────────────────────────────────────────
+
+export interface MetaErrorResponse {
+  error: {
+    message: string
+    type: string
+    code: number
+    error_subcode?: number
+    fbtrace_id?: string
+  }
+}
+
+// ─── DB record (whatsapp_messages table) ─────────────────────────────────────
+
+export type MessageType = 'text' | 'image' | 'document' | 'interactive' | 'template'
+
+export interface WhatsAppMessageRecord {
+  organization_id: string
+  message_id: string
+  direction: 'inbound' | 'outbound'
+  sender_phone: string
+  message_type: MessageType
+  message_body?: string | null
+  media_url?: string | null
+  intent_classified?: string | null
+  intent_confidence?: number | null
+  eval_score?: number | null
+  was_triggered?: boolean
+  was_processed?: boolean
+  processing_result?: Record<string, unknown> | null
+}
+
+// ─── Inbound message types ────────────────────────────────────────────────────
+
 export type WhatsAppMessageKind =
   | 'text'
   | 'image'
