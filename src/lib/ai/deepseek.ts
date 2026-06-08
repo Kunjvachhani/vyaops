@@ -13,7 +13,7 @@ const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1'
 const MAX_RETRIES = 3
 const TIMEOUT_MS = 30_000
 
-const CLASSIFY_SYSTEM_PROMPT = `You are an AI assistant for Indian manufacturing factories. You process WhatsApp messages in Gujarati, Hindi, Hinglish, and English.
+export const CLASSIFY_SYSTEM_PROMPT = `You are an AI assistant for Indian manufacturing factories. You process WhatsApp messages in Gujarati, Hindi, Hinglish, and English.
 
 Your task: classify the intent and extract structured data from the message.
 

@@ -131,3 +131,48 @@ export const DeepSeekClassifyResponseSchema = z.object({
 })
 
 export type DeepSeekClassifyResponse = z.infer<typeof DeepSeekClassifyResponseSchema>
+
+// ─── Eval gate types ──────────────────────────────────────────────────────────
+
+export type EvalGateDecision = 'auto_process' | 'confirm' | 'clarify' | 'reject_show_menu'
+
+export interface PerDimensionScores {
+  intent_correctness: number
+  entity_accuracy: number
+  entity_completeness: number
+  match_confidence: number
+  language_understanding: number
+}
+
+export interface EvaluateExtractionResult {
+  compositeScore: number
+  perDimensionScores: PerDimensionScores
+  reasoning: string
+  failureCodes: string[]
+  decision: EvalGateDecision
+}
+
+export interface ExtractionInput {
+  intent: IntentResult
+  entities: EntityResult
+}
+
+export interface RouteAndProcessResult {
+  decision: EvalGateDecision
+  intent: IntentResult
+  entities: EntityResult
+  evalResult: EvaluateExtractionResult
+  modelUsed: 'deepseek' | 'qwen'
+}
+
+export const QwenEvalResponseSchema = z.object({
+  intent_correctness: z.number().min(0).max(1),
+  entity_accuracy: z.number().min(0).max(1),
+  entity_completeness: z.number().min(0).max(1),
+  match_confidence: z.number().min(0).max(1),
+  language_understanding: z.number().min(0).max(1),
+  reasoning: z.string(),
+  failure_codes: z.array(z.string()).default([]),
+})
+
+export type QwenEvalResponse = z.infer<typeof QwenEvalResponseSchema>
