@@ -149,15 +149,17 @@ export async function POST(request: NextRequest): Promise<Response> {
     return new Response('Bad Request', { status: 400 })
   }
 
-  // TEMP DEBUG — log all headers
-  const headers: Record<string, string> = {}
-  request.headers.forEach((value, key) => { headers[key] = value })
-  console.log('[whatsapp] incoming headers:', JSON.stringify(headers))
-  console.log('[whatsapp] signature header:', request.headers.get('x-hub-signature-256'))
+  // Dualhook test pings don't carry Meta HMAC signature — let them through
+  const isDualhookPing = request.headers.get('x-dualhook-event') === 'test_ping'
 
-  if (!verifySignature(rawBody, request.headers.get('x-hub-signature-256'))) {
+  if (!isDualhookPing && !verifySignature(rawBody, request.headers.get('x-hub-signature-256'))) {
     console.error('[whatsapp] HMAC-SHA256 signature verification failed — rejecting webhook')
     return new Response('Unauthorized', { status: 401 })
+  }
+
+  if (isDualhookPing) {
+    console.log('[whatsapp] Dualhook test ping received — OK')
+    return new Response('', { status: 200 })
   }
 
   let payload: MetaWebhookPayload
