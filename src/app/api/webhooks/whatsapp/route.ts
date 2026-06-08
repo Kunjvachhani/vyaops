@@ -1,4 +1,3 @@
-import { after } from 'next/server'
 import { NextRequest } from 'next/server'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { adminClient } from '@/lib/supabase/admin'
@@ -110,7 +109,7 @@ async function processInboundMessage(msg: WhatsAppInboundMessage): Promise<void>
   }
 }
 
-async function processWebhookPayload(payload: MetaWebhookPayload): Promise<void> {
+async function _processWebhookPayload(payload: MetaWebhookPayload): Promise<void> {
   for (const entry of payload.entry) {
     for (const change of entry.changes) {
       if (change.field !== 'messages') continue
