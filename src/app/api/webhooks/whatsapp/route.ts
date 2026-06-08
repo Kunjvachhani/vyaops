@@ -1,3 +1,4 @@
+import { after } from 'next/server'
 import { NextRequest } from 'next/server'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { adminClient } from '@/lib/supabase/admin'
@@ -158,6 +159,21 @@ export async function POST(request: NextRequest): Promise<Response> {
     console.error('[whatsapp] HMAC-SHA256 signature verification failed — rejecting webhook')
     return new Response('Unauthorized', { status: 401 })
   }
+
+  let payload: MetaWebhookPayload
+  try {
+    payload = JSON.parse(rawBody) as MetaWebhookPayload
+  } catch {
+    return new Response('Bad Request', { status: 400 })
+  }
+
+  if (payload.object !== 'whatsapp_business_account') {
+    return new Response('', { status: 200 })
+  }
+
+  after(async () => {
+    await _processWebhookPayload(payload)
+  })
 
   return new Response('', { status: 200 })
 }
