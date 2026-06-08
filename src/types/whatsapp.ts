@@ -5,6 +5,16 @@ export interface Button {
   title: string // max 20 chars (WhatsApp limit)
 }
 
+export type InteractiveMessage =
+  | { type: 'list'; body: string; sections: Section[] }
+  | { type: 'button'; body: string; buttons: Button[] }
+
+export interface ClarificationOption {
+  id: string
+  label: string
+  description?: string
+}
+
 export interface ListItem {
   id: string
   title: string
