@@ -132,6 +132,10 @@ npm run test:benchmark         # AI eval benchmark suite
 8. NEVER log sensitive data (full phones, GSTINs, amounts) to Sentry.
 9. All monetary values stored as PAISE (integer). No floats for money.
 10. All timestamps stored as UTC. Displayed as IST.
+11. `audit_log`, `whatsapp_messages`, and `whatsapp_sessions` intentionally have RLS disabled — they are
+    service-role-only, append-only tables. BEFORE GOING TO PRODUCTION: audit every query touching these
+    three tables and confirm none use the anon key (`src/lib/supabase/client.ts` or
+    `src/lib/supabase/server.ts`). All reads/writes MUST go through `adminClient` only.
 
 ---
 
