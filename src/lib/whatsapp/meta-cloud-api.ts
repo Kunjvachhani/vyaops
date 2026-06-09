@@ -120,6 +120,35 @@ async function sendAndLog(
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+// Forwards an already-assembled Meta message body (type + type-specific payload)
+// straight to the Graph API. Used by the /api/whatsapp/send callback, where n8n
+// hands us a fully-built interactive/text/template object. Merges the envelope
+// fields (messaging_product/recipient_type/to) and logs the outbound message.
+export async function sendRawMessage(
+  phone: string,
+  message: { type: MessageType; [key: string]: unknown },
+  organizationId: string
+): Promise<SendResult> {
+  const apiBody: Record<string, unknown> = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: phone,
+    ...message,
+  }
+
+  // Best-effort human-readable body for the log row.
+  let logBody: string | undefined
+  if (message.type === 'text') {
+    logBody = (message.text as { body?: string } | undefined)?.body
+  } else if (message.type === 'interactive') {
+    logBody = (message.interactive as { body?: { text?: string } } | undefined)?.body?.text
+  } else if (message.type === 'template') {
+    logBody = (message.template as { name?: string } | undefined)?.name
+  }
+
+  return sendAndLog(organizationId, phone, message.type, apiBody, logBody)
+}
+
 export async function sendTextMessage(
   phone: string,
   text: string,

@@ -25,6 +25,12 @@
 15. Log outcome to whatsapp_messages (eval_score, was_processed, processing_result)
 ```
 
+**Orchestration boundary:** steps 1–8 run in `/api/webhooks/whatsapp`, which then
+forwards `{message, sender, orgId, messageType, isTriggered}` to the n8n master
+handler. Steps 9–14 are orchestrated by n8n calling back into Next.js routes
+(`/api/ai` covers 9–11; `/api/orders` covers 12–13; `/api/whatsapp/send` covers 14).
+n8n never calls DeepSeek or Meta directly. See `docs/infrastructure/N8N_PIPELINE.md`.
+
 ## Webhook Payload (Meta Cloud API format)
 ```json
 {

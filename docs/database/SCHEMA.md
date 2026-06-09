@@ -343,6 +343,21 @@ created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 ```
 **Note:** APPEND-ONLY for inbound. No updates, no deletes. This is your AI training data.
 
+## TABLE: whatsapp_sessions
+Conversation state for WhatsApp guided flows (Opt-In Trigger Model). One live
+session per (organization_id, sender_phone); short-lived and overwritten per flow.
+Written only by the `/api/session/store` callback via the service-role client.
+```
+id                  UUID PK DEFAULT gen_random_uuid()
+organization_id     UUID NOT NULL
+sender_phone        TEXT NOT NULL
+state               JSONB NOT NULL DEFAULT '{}'       -- accumulating selection: selected_customer_id, selected_product_id, quantity, ...
+expires_at          TIMESTAMPTZ NOT NULL DEFAULT now() + INTERVAL '1 hour'
+created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()  -- auto via update_updated_at trigger
+```
+**Unique:** `UNIQUE(organization_id, sender_phone)` — upserts target this. No RLS (service-role only, like whatsapp_messages).
+
 ## TABLE: eval_benchmark
 Test cases for the eval loop. Grows over time from production corrections.
 ```
@@ -410,6 +425,7 @@ organizations (tenant root)
   ├── billing_events (many)
   ├── audit_log (many, append-only, NO RLS)
   ├── whatsapp_messages (many, append-only)
+  ├── whatsapp_sessions (one live per sender, NO RLS)
   └── eval_benchmark (global, not per-org)
 ```
 

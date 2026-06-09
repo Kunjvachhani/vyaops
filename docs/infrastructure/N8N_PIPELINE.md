@@ -1,5 +1,28 @@
 # n8n Workflow Pipeline
 
+## Architecture: n8n proxied through Next.js
+
+The master handler (`n8n/workflows/master-message-handler.json`) does NOT call
+Meta or DeepSeek directly. It is orchestration only — every external action goes
+back through the Next.js app, so all WhatsApp sends, AI calls, and writes flow
+through one audited, credential-holding layer.
+
+```
+Meta → /api/webhooks/whatsapp (verify HMAC, log, decide isTriggered)
+     → forwards {message, sender, orgId, messageType, isTriggered} to n8n webhook
+     → n8n routes (guided / AI / log-only) and calls BACK into Next.js:
+         /api/ai                  intent → resolve → eval → routing decision
+         /api/whatsapp/menu       build main/sub menu (returns or sends)
+         /api/whatsapp/send       forward a built Meta message → Cloud API
+         /api/session/store       guided-flow conversation state
+         /api/analytics/log-intent PostHog capture (Branch C, no reply)
+         /api/errors/log          error sink (Error Trigger branch)
+         /api/orders              order creation
+```
+
+All callbacks authenticate `x-internal-api-key` against `INTERNAL_API_KEY`. n8n
+holds only `APP_URL` + `INTERNAL_API_KEY` (workflow env), no Meta/DeepSeek keys.
+
 ## Workflow Categories
 
 ### Message-Triggered (real-time, <15s processing)

@@ -14,7 +14,7 @@
 ## Read These Docs Before Writing Any Code
 ```
 REQUIRED READING ORDER:
-1. docs/database/SCHEMA.md          → Complete database schema (19 tables)
+1. docs/database/SCHEMA.md          → Complete database schema (20 tables)
 2. docs/security/RLS_POLICIES.md    → Row-Level Security for multi-tenancy
 3. docs/security/FEATURE_GATING.md  → Tier-based feature access control
 4. docs/security/EDGE_CASES.md      → Safety, destructive action protection
@@ -164,6 +164,8 @@ npm run test:benchmark         # AI eval benchmark suite
 - Interactive messages dynamically generated based on org tier + master data.
 - Webhook payloads arrive directly from Meta via Dualhook's Webhook Override. Verify using META_WHATSAPP_APP_SECRET (X-Hub-Signature-256 header).
 - Webhook acknowledged in <1 second. Processing is async.
+- **Orchestration lives in n8n (`n8n/workflows/master-message-handler.json`), proxied through Next.js.** The webhook verifies + forwards `{message, sender, orgId, messageType, isTriggered}` to the n8n webhook; n8n routes (guided / AI / log-only) and calls BACK into Next.js API routes — never Meta or DeepSeek directly. All outbound WhatsApp + AI flows through the audited app layer.
+- Internal callback routes (`/api/ai`, `/api/whatsapp/send`, `/api/whatsapp/menu`, `/api/session/store`, `/api/analytics/log-intent`, `/api/errors/log`) authenticate the `x-internal-api-key` header against `INTERNAL_API_KEY`. Never expose these to the browser.
 
 ---
 
@@ -219,7 +221,7 @@ vyaops/
 │   │   │   └── settings/
 │   │   ├── (admin)/                  # Our internal admin
 │   │   ├── api/
-│   │   │   ├── webhooks/whatsapp/    # Meta Cloud API webhook (via Dualhook Webhook Override)
+│   │   │   ├── webhooks/whatsapp/    # Meta Cloud API webhook → forwards to n8n
 │   │   │   ├── webhooks/razorpay/    # Razorpay webhook
 │   │   │   ├── orders/
 │   │   │   ├── invoices/
@@ -227,7 +229,11 @@ vyaops/
 │   │   │   ├── inventory/
 │   │   │   ├── customers/
 │   │   │   ├── vendors/
-│   │   │   └── ai/
+│   │   │   ├── ai/                   # AI pipeline: classify → resolve → eval → route
+│   │   │   ├── whatsapp/             # send + menu (n8n callback → Meta Cloud API)
+│   │   │   ├── session/              # store (guided-flow conversation state)
+│   │   │   ├── analytics/            # log-intent (PostHog capture)
+│   │   │   └── errors/               # log (n8n error sink → Sentry)
 │   │   └── layout.tsx
 │   ├── components/
 │   │   ├── ui/                       # shadcn/ui
@@ -347,6 +353,10 @@ META_WHATSAPP_BUSINESS_ACCOUNT_ID=
 META_WHATSAPP_VERIFY_TOKEN=
 META_WHATSAPP_APP_SECRET=
 DUALHOOK_API_KEY=
+
+# n8n orchestration + internal callbacks
+N8N_WEBHOOK_URL=                 # n8n master-handler production webhook
+INTERNAL_API_KEY=                # shared secret: Next.js ↔ n8n callbacks (x-internal-api-key)
 
 # Razorpay
 RAZORPAY_KEY_ID=
