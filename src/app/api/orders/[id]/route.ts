@@ -9,6 +9,7 @@ import type { OrderStatus } from '@/lib/validations/order'
 type OrderRow = Database['public']['Tables']['orders']['Row']
 type OrderUpdate = Database['public']['Tables']['orders']['Update']
 type CustomerRow = Database['public']['Tables']['customers']['Row']
+type ProductRow = Database['public']['Tables']['products']['Row']
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -29,7 +30,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
   const { data: dataRaw, error } = await supabase
     .from('orders')
     .select(
-      '*, customers(id, name, company_name, phone, email, payment_terms_days, address)'
+      '*, customers(id, name, company_name, phone, email, payment_terms_days, address), products(id, name, unit, unit_price_paise)'
     )
     .eq('id', id)
     .eq('organization_id', user.org_id)
@@ -40,10 +41,11 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: 'Order not found', code: 'NOT_FOUND' }, { status: 404 })
   }
 
-  type OrderWithCustomer = OrderRow & {
+  type OrderWithDetails = OrderRow & {
     customers: Pick<CustomerRow, 'id' | 'name' | 'company_name' | 'phone' | 'email' | 'payment_terms_days' | 'address'> | null
+    products: Pick<ProductRow, 'id' | 'name' | 'unit' | 'unit_price_paise'> | null
   }
-  const data = dataRaw as unknown as OrderWithCustomer
+  const data = dataRaw as unknown as OrderWithDetails
 
   return NextResponse.json({ data })
 }

@@ -184,8 +184,10 @@ export type Database = {
         Row: {
           address: string | null
           aliases: string[]
+          city: string | null
           company_name: string | null
           created_at: string
+          credit_limit_paise: number
           deleted_at: string | null
           email: string | null
           gstin: string | null
@@ -195,13 +197,16 @@ export type Database = {
           organization_id: string
           payment_terms_days: number
           phone: string | null
+          state: string
           updated_at: string
         }
         Insert: {
           address?: string | null
           aliases?: string[]
+          city?: string | null
           company_name?: string | null
           created_at?: string
+          credit_limit_paise?: number
           deleted_at?: string | null
           email?: string | null
           gstin?: string | null
@@ -211,13 +216,16 @@ export type Database = {
           organization_id: string
           payment_terms_days?: number
           phone?: string | null
+          state?: string
           updated_at?: string
         }
         Update: {
           address?: string | null
           aliases?: string[]
+          city?: string | null
           company_name?: string | null
           created_at?: string
+          credit_limit_paise?: number
           deleted_at?: string | null
           email?: string | null
           gstin?: string | null
@@ -227,6 +235,7 @@ export type Database = {
           organization_id?: string
           payment_terms_days?: number
           phone?: string | null
+          state?: string
           updated_at?: string
         }
         Relationships: [

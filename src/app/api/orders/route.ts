@@ -8,6 +8,7 @@ import { createOrderSchema } from '@/lib/validations/order'
 
 type CustomerRow = Database['public']['Tables']['customers']['Row']
 type OrderRow = Database['public']['Tables']['orders']['Row']
+type ProductRow = Database['public']['Tables']['products']['Row']
 
 // Supabase JS v2 column-select inference can resolve to `never` in strict mode;
 // these helpers cast safely without widening to `any`.
@@ -37,7 +38,9 @@ export async function GET(req: NextRequest) {
   const page = Math.max(1, parseInt(sp.get('page') ?? '1', 10))
   const limit = Math.min(100, Math.max(1, parseInt(sp.get('limit') ?? '20', 10)))
   const offset = (page - 1) * limit
-  const status = sp.get('status')
+  // Accept comma-separated statuses (e.g. "draft,confirmed") or legacy single status.
+  const statusParam = sp.get('statuses') ?? sp.get('status')
+  const statuses = statusParam ? statusParam.split(',').map((s) => s.trim()).filter(Boolean) : []
   const customerId = sp.get('customer_id')
   const dateFrom = sp.get('date_from')
   const dateTo = sp.get('date_to')
@@ -66,11 +69,12 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from('orders')
-    .select('*, customers(id, name, company_name, phone)', { count: 'exact' })
+    .select('*, customers(id, name, company_name, phone), products(id, name, unit)', { count: 'exact' })
     .eq('organization_id', user.org_id)
     .is('deleted_at', null)
 
-  if (status) query = query.eq('status', status)
+  if (statuses.length === 1) query = query.eq('status', statuses[0])
+  else if (statuses.length > 1) query = query.in('status', statuses)
   if (customerId) query = query.eq('customer_id', customerId)
   if (dateFrom) query = query.gte('created_at', dateFrom)
   if (dateTo) query = query.lte('created_at', dateTo)
@@ -94,7 +98,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch orders', code: 'DB_ERROR' }, { status: 500 })
   }
 
-  const orders = ordersRaw as unknown as AsList<OrderRow & { customers: Pick<CustomerRow, 'id' | 'name' | 'company_name' | 'phone'> | null }>
+  type OrderListItem = OrderRow & {
+    customers: Pick<CustomerRow, 'id' | 'name' | 'company_name' | 'phone'> | null
+    products: Pick<ProductRow, 'id' | 'name' | 'unit'> | null
+  }
+  const orders = ordersRaw as unknown as AsList<OrderListItem>
 
   return NextResponse.json({
     data: orders,
