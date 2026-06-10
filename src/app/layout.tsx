@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   title: 'VyaOps',
   description: 'Business on WhatsApp — AI-powered operations for Indian MSMEs',
   other: {
-    'facebook-domain-verification': 'ig4cll0ipyk8bkxh2qwrftvqlovnws',
+    'facebook-domain-verification': 'cp426glwzbqviopp8fdiz5gnhz12dr',
   },
 }
 
