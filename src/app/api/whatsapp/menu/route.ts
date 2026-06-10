@@ -1,3 +1,7 @@
+// DEPRECATED: The owner-facing guided menu no longer exists in the new
+// customer-initiated echo-confirmed flow. This route is retained only in case
+// it is repurposed for future admin tooling. It is NOT wired into the n8n
+// master-message-handler workflow and should NOT be called from customer chats.
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { adminClient } from '@/lib/supabase/admin'

@@ -1,0 +1,84 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { requireInternalAuth } from '@/lib/utils/internal-auth'
+import { handleCustomerMessage, handleOwnerEcho } from '@/lib/whatsapp/flow-engine'
+
+// Internal-auth endpoint called by n8n for both customer messages and owner echoes.
+// n8n branches on messageType: 'customer_text' | 'owner_echo'.
+// Errors are logged to Sentry via console; never surfaced to the customer chat (Rule A).
+
+const CustomerMessageSchema = z.object({
+  messageType: z.enum(['customer_text', 'button_reply', 'list_reply']),
+  message: z.string(),
+  chatPhone: z.string().min(5),
+  orgId: z.string().uuid(),
+  messageId: z.string().min(1),
+  customerId: z.string().uuid().nullable().optional(),
+})
+
+const OwnerEchoSchema = z.object({
+  messageType: z.literal('owner_echo'),
+  message: z.string(),
+  chatPhone: z.string().min(5),
+  orgId: z.string().uuid(),
+  messageId: z.string().min(1),
+  isCommand: z.boolean().optional(),
+})
+
+const RequestSchema = z.discriminatedUnion('messageType', [
+  CustomerMessageSchema,
+  OwnerEchoSchema,
+  // button_reply and list_reply treated as customer_text for flow routing
+  z.object({ messageType: z.literal('button_reply'), message: z.string(), chatPhone: z.string(), orgId: z.string().uuid(), messageId: z.string(), customerId: z.string().uuid().nullable().optional() }),
+  z.object({ messageType: z.literal('list_reply'), message: z.string(), chatPhone: z.string(), orgId: z.string().uuid(), messageId: z.string(), customerId: z.string().uuid().nullable().optional() }),
+])
+
+export async function POST(request: NextRequest) {
+  const unauthorized = requireInternalAuth(request)
+  if (unauthorized) return unauthorized
+
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON', code: 'PARSE_ERROR' }, { status: 400 })
+  }
+
+  const parsed = RequestSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'Invalid request', code: 'VALIDATION_ERROR', details: parsed.error.issues },
+      { status: 400 }
+    )
+  }
+
+  const data = parsed.data
+
+  // Acknowledge immediately — processing is async (fire-and-forget from route handler)
+  // n8n waits on this response; we must return before the 30s node timeout.
+  void (async () => {
+    try {
+      if (data.messageType === 'owner_echo') {
+        await handleOwnerEcho(data.orgId, data.chatPhone, data.message, data.messageId)
+      } else {
+        // customer_text, button_reply, list_reply — all handled as customer messages
+        const customerId = 'customerId' in data ? (data.customerId ?? null) : null
+        await handleCustomerMessage(
+          data.orgId,
+          data.chatPhone,
+          customerId,
+          data.message,
+          data.messageId
+        )
+      }
+    } catch (err) {
+      console.error('[flow] unhandled error:', {
+        messageType: data.messageType,
+        orgId: data.orgId,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+  })()
+
+  return NextResponse.json({ ok: true })
+}
