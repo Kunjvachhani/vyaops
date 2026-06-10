@@ -198,6 +198,22 @@
                 "combinator": "and"
               },
               "renameOutput": true
+            },
+            {
+              "outputKey": "Edit Order",
+              "conditions": {
+                "options": { "caseSensitive": true },
+                "conditions": [
+                  {
+                    "id": "ar5c0",
+                    "leftValue": "={{ $json.selectionPrefix }}",
+                    "rightValue": "edit_",
+                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true
             }
           ]
         },
@@ -227,11 +243,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ menuId: $json.selectionId, orgId: $json.body.orgId, sender: $json.body.sender }) }}",
         "options": {
-          "retry": {
-            "enabled": true,
-            "maxTries": 3,
-            "waitBetweenTries": 1000
-          }
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 1000 }
         }
       }
     },
@@ -256,11 +268,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ to: $('WhatsApp Webhook').first().json.body.sender, type: 'interactive', interactive: $json.interactive }) }}",
         "options": {
-          "retry": {
-            "enabled": true,
-            "maxTries": 3,
-            "waitBetweenTries": 1000
-          }
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 1000 }
         }
       }
     },
@@ -285,14 +293,9 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ sender: $json.body.sender, orgId: $json.body.orgId, key: 'selected_customer_id', value: $json.selectionId.replace('customer_', '') }) }}",
         "options": {
-          "retry": {
-            "enabled": true,
-            "maxTries": 3,
-            "waitBetweenTries": 1000
-          }
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 1000 }
         }
-      },
-      "notes": "Stores customer selection in session, then Next.js API returns product list via Send SubMenu WhatsApp"
+      }
     },
 
     {
@@ -315,41 +318,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ sender: $json.body.sender, orgId: $json.body.orgId, key: 'selected_product_id', value: $json.selectionId.replace('product_', '') }) }}",
         "options": {
-          "retry": {
-            "enabled": true,
-            "maxTries": 3,
-            "waitBetweenTries": 1000
-          }
-        }
-      },
-      "notes": "Stores product selection in session, then Next.js API sends quantity prompt"
-    },
-
-    {
-      "id": "node-09-create-order-guided",
-      "name": "Create Order Guided",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [1250, -150],
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.APP_URL }}/api/orders",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ source: 'whatsapp_guided', confirmId: $json.selectionId, orgId: $json.body.orgId, sender: $json.body.sender }) }}",
-        "options": {
-          "retry": {
-            "enabled": true,
-            "maxTries": 3,
-            "waitBetweenTries": 1000
-          }
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 1000 }
         }
       }
     },
@@ -374,11 +343,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ to: $json.body.sender, type: 'text', text: { body: 'Order cancelled. Type VYAOPS to restart.' } }) }}",
         "options": {
-          "retry": {
-            "enabled": true,
-            "maxTries": 3,
-            "waitBetweenTries": 1000
-          }
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 1000 }
         }
       }
     },
@@ -403,14 +368,23 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ message: $json.body.message, orgId: $json.body.orgId }) }}",
         "options": {
-          "retry": {
-            "enabled": true,
-            "maxTries": 3,
-            "waitBetweenTries": 1000
-          },
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 1000 },
           "timeout": 30000
         }
       }
+    },
+
+    {
+      "id": "node-22-extract-entities",
+      "name": "Extract Order Entities",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 300],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Flatten the AI extraction into a clean orderParams object.\n// Passes through all existing AI fields so the Decision Router can still read $json.decision.\nconst ai = $input.item.json;\nconst entities = ai.extraction?.entities ?? [];\nconst find = (type) => entities.find(e => e.type === type);\n\nconst customerEnt = find('customer_name');\nconst productEnt  = find('product_name');\nconst qtyEnt      = find('quantity');\nconst priceEnt    = find('price');\n\nconst customerName = customerEnt?.normalizedValue || customerEnt?.rawValue || '';\nconst productName  = productEnt?.normalizedValue  || productEnt?.rawValue  || '';\nconst quantity     = qtyEnt   ? parseInt(qtyEnt.rawValue, 10) : 0;\n// AI extracts price_raw in rupees — convert to paise\nconst unitPricePaise = priceEnt ? Math.round(parseFloat(priceEnt.rawValue) * 100) : 0;\nconst totalPaise = quantity * unitPricePaise;\nconst amountDisplay = totalPaise > 0\n  ? '\\u20b9' + (totalPaise / 100).toLocaleString('en-IN')\n  : 'TBD';\n\nreturn {\n  json: {\n    ...ai,\n    orderParams: {\n      customerName,\n      productName,\n      quantity,\n      unitPricePaise,\n      summary: `Customer: ${customerName || '?'}\\nProduct: ${productName || '?'} \\u00d7 ${quantity || '?'}\\nAmount: ${amountDisplay}`,\n    },\n  }\n};"
+      },
+      "notes": "Runs after AI Classify. Extracts entities into orderParams; passes $json.decision through for the Decision Router."
     },
 
     {
@@ -418,7 +392,7 @@
       "name": "AI Decision Router",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
-      "position": [1000, 300],
+      "position": [1250, 300],
       "parameters": {
         "rules": {
           "values": [
@@ -499,10 +473,10 @@
       "name": "Create Order AI",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1250, 150],
+      "position": [1500, 150],
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.APP_URL }}/api/orders",
+        "url": "={{ $env.APP_URL }}/api/orders/whatsapp-create",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -512,23 +486,20 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ source: 'whatsapp_ai', orgId: $('WhatsApp Webhook').first().json.body.orgId, sender: $('WhatsApp Webhook').first().json.body.sender, extraction: $('AI Classify').first().json.extraction }) }}",
+        "jsonBody": "={{ JSON.stringify({ orgId: $('WhatsApp Webhook').first().json.body.orgId, sender: $('WhatsApp Webhook').first().json.body.sender, customerName: $('Extract Order Entities').first().json.orderParams.customerName, productName: $('Extract Order Entities').first().json.orderParams.productName, quantity: $('Extract Order Entities').first().json.orderParams.quantity, unitPricePaise: $('Extract Order Entities').first().json.orderParams.unitPricePaise }) }}",
         "options": {
-          "retry": {
-            "enabled": true,
-            "maxTries": 3,
-            "waitBetweenTries": 1000
-          }
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 1000 }
         }
-      }
+      },
+      "notes": "Called on auto_process. Uses resolved entity names from Extract Order Entities."
     },
 
     {
-      "id": "node-14-send-confirmation-template",
-      "name": "Send Order Confirmation Template",
+      "id": "node-14-send-order-success",
+      "name": "Send Order Success",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1500, 150],
+      "position": [1750, 150],
       "parameters": {
         "method": "POST",
         "url": "={{ $env.APP_URL }}/api/whatsapp/send",
@@ -541,15 +512,38 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ to: $('WhatsApp Webhook').first().json.body.sender, type: 'template', template: { name: 'order_confirmed', language: { code: 'en' }, components: [{ type: 'body', parameters: [{ type: 'text', text: $json.orderNumber ?? '' }] }] } }) }}",
+        "jsonBody": "={{ JSON.stringify({ to: $('WhatsApp Webhook').first().json.body.sender, type: 'text', text: { body: `✅ Order #${$json.orderNumber} created\\nCustomer: ${$json.customerName}\\nProduct: ${$json.productName} \\u00d7 ${$json.quantity}\\nAmount: \\u20b9${($json.totalAmountPaise / 100).toFixed(0)}\\nStatus: Confirmed` } }) }}",
         "options": {
-          "retry": {
-            "enabled": true,
-            "maxTries": 3,
-            "waitBetweenTries": 1000
-          }
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 1000 }
         }
-      }
+      },
+      "notes": "Sends plain-text confirmation — no Meta template needed since we reply within 24h."
+    },
+
+    {
+      "id": "node-23-store-pending",
+      "name": "Store Pending Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1500, 350],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/session/store",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ orgId: $('WhatsApp Webhook').first().json.body.orgId, sender: $('WhatsApp Webhook').first().json.body.sender, state: { pending_customer_name: $('Extract Order Entities').first().json.orderParams.customerName, pending_product_name: $('Extract Order Entities').first().json.orderParams.productName, pending_quantity: $('Extract Order Entities').first().json.orderParams.quantity, pending_price_paise: $('Extract Order Entities').first().json.orderParams.unitPricePaise }, ttl_seconds: 600 }) }}",
+        "options": {
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 1000 }
+        }
+      },
+      "notes": "Persists pending order to session with 10-min TTL before sending confirm buttons."
     },
 
     {
@@ -557,7 +551,7 @@
       "name": "Send Confirm Buttons",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1250, 300],
+      "position": [1750, 350],
       "parameters": {
         "method": "POST",
         "url": "={{ $env.APP_URL }}/api/whatsapp/send",
@@ -570,23 +564,46 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ to: $('WhatsApp Webhook').first().json.body.sender, type: 'interactive', interactive: { type: 'button', body: { text: 'Order summary:\\n' + JSON.stringify($('AI Classify').first().json.extraction?.entities ?? {}, null, 2) + '\\n\\nConfirm this order?' }, action: { buttons: [{ type: 'reply', reply: { id: 'confirm_' + $('AI Classify').first().json.extraction?.intent?.rawMessage?.slice(0, 20), title: '✅ Confirm' } }, { type: 'reply', reply: { id: 'cancel_ai', title: '❌ Cancel' } }] } } }) }}",
+        "jsonBody": "={{ JSON.stringify({ to: $('WhatsApp Webhook').first().json.body.sender, type: 'interactive', interactive: { type: 'button', body: { text: `📋 Order Summary:\\n${$('Extract Order Entities').first().json.orderParams.summary}\\n\\nConfirm this order?` }, action: { buttons: [ { type: 'reply', reply: { id: 'confirm_order', title: '✅ Confirm' } }, { type: 'reply', reply: { id: 'edit_order', title: '✏️ Edit' } }, { type: 'reply', reply: { id: 'cancel_order', title: '❌ Cancel' } } ] } } }) }}",
         "options": {
-          "retry": {
-            "enabled": true,
-            "maxTries": 3,
-            "waitBetweenTries": 1000
-          }
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 1000 }
         }
-      }
+      },
+      "notes": "Fixed button IDs: confirm_order / edit_order / cancel_order. Summary comes from Extract Order Entities."
     },
 
     {
-      "id": "node-16-send-clarification",
-      "name": "Send Clarification",
+      "id": "node-24-get-clarification",
+      "name": "Get AI Clarification",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1250, 450],
+      "position": [1500, 500],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/ai/clarify",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ orgId: $('WhatsApp Webhook').first().json.body.orgId, sender: $('WhatsApp Webhook').first().json.body.sender, failureCodes: $('Extract Order Entities').first().json.scores?.failureCodes ?? [], entities: $('Extract Order Entities').first().json.extraction?.entities ?? [], intent: $('Extract Order Entities').first().json.extraction?.intent?.intent }) }}",
+        "options": {
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 1000 }
+        }
+      },
+      "notes": "Builds a targeted clarification message (customer list, product list, or quantity prompt)."
+    },
+
+    {
+      "id": "node-25-send-clarification-msg",
+      "name": "Send Clarification Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1750, 500],
       "parameters": {
         "method": "POST",
         "url": "={{ $env.APP_URL }}/api/whatsapp/send",
@@ -599,13 +616,9 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ to: $('WhatsApp Webhook').first().json.body.sender, type: 'text', text: { body: 'I need a bit more info:\\n' + ($('AI Classify').first().json.scores?.reasoning ?? 'Could you clarify your request?') } }) }}",
+        "jsonBody": "={{ JSON.stringify($json.message) }}",
         "options": {
-          "retry": {
-            "enabled": true,
-            "maxTries": 3,
-            "waitBetweenTries": 1000
-          }
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 1000 }
         }
       }
     },
@@ -615,7 +628,7 @@
       "name": "Send Main Menu",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1250, 600],
+      "position": [1500, 650],
       "parameters": {
         "method": "POST",
         "url": "={{ $env.APP_URL }}/api/whatsapp/menu",
@@ -630,13 +643,170 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ menuId: 'menu_main', orgId: $('WhatsApp Webhook').first().json.body.orgId, sender: $('WhatsApp Webhook').first().json.body.sender, sendDirect: true }) }}",
         "options": {
-          "retry": {
-            "enabled": true,
-            "maxTries": 3,
-            "waitBetweenTries": 1000
-          }
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 1000 }
         }
       }
+    },
+
+    {
+      "id": "node-26-read-session-confirm",
+      "name": "Read Session for Confirm",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, -150],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/session/read",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ orgId: $json.body.orgId, sender: $json.body.sender }) }}",
+        "options": {
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 1000 }
+        }
+      },
+      "notes": "Reads pending_customer_name / pending_product_name / pending_quantity / pending_price_paise."
+    },
+
+    {
+      "id": "node-27-session-check",
+      "name": "Session Valid Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1500, -150],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "c0",
+              "leftValue": "={{ $json.expired }}",
+              "rightValue": false,
+              "operator": { "type": "boolean", "operation": "equals", "name": "filter.operator.equals" }
+            },
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.found }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals", "name": "filter.operator.equals" }
+            },
+            {
+              "id": "c2",
+              "leftValue": "={{ $json.state.pending_customer_name }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEquals", "name": "filter.operator.notEquals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "True → create order; False → session expired, send expiry message."
+    },
+
+    {
+      "id": "node-28-create-order-confirm",
+      "name": "Create Order From Confirm",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1750, -200],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/orders/whatsapp-create",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ orgId: $('WhatsApp Webhook').first().json.body.orgId, sender: $('WhatsApp Webhook').first().json.body.sender, customerName: $('Read Session for Confirm').first().json.state.pending_customer_name, productName: $('Read Session for Confirm').first().json.state.pending_product_name, quantity: $('Read Session for Confirm').first().json.state.pending_quantity, unitPricePaise: $('Read Session for Confirm').first().json.state.pending_price_paise ?? 0 }) }}",
+        "options": {
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 1000 }
+        }
+      },
+      "notes": "Creates order from session state after user taps ✅ Confirm. Idempotency key prevents double-creation."
+    },
+
+    {
+      "id": "node-29-send-confirm-success",
+      "name": "Send Confirm Order Success",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2000, -200],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/whatsapp/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $('WhatsApp Webhook').first().json.body.sender, type: 'text', text: { body: `✅ Order #${$json.orderNumber} created\\nCustomer: ${$json.customerName}\\nProduct: ${$json.productName} \\u00d7 ${$json.quantity}\\nAmount: \\u20b9${($json.totalAmountPaise / 100).toFixed(0)}\\nStatus: Confirmed` } }) }}"
+      }
+    },
+
+    {
+      "id": "node-31-send-session-expired",
+      "name": "Send Session Expired",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1750, -50],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/whatsapp/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $('WhatsApp Webhook').first().json.body.sender, type: 'text', text: { body: 'Session expired (10 min timeout). Please start over by sending your order again.' } }) }}",
+        "options": {
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 1000 }
+        }
+      }
+    },
+
+    {
+      "id": "node-30-send-edit-prompt",
+      "name": "Send Edit Prompt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, 75],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/whatsapp/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.body.sender, type: 'text', text: { body: 'What would you like to change? Reply with the updated details (e.g. \"change quantity to 200\" or \"different customer\").' } }) }}",
+        "options": {
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 1000 }
+        }
+      },
+      "notes": "Sent when user taps ✏️ Edit. Next message goes through AI Classify again."
     },
 
     {
@@ -659,11 +829,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ orgId: $json.body.orgId, sender: $json.body.sender, message: $json.body.message, messageType: $json.body.messageType, isTriggered: $json.body.isTriggered, timestamp: new Date().toISOString() }) }}",
         "options": {
-          "retry": {
-            "enabled": true,
-            "maxTries": 2,
-            "waitBetweenTries": 1000
-          }
+          "retry": { "enabled": true, "maxTries": 2, "waitBetweenTries": 1000 }
         }
       },
       "notes": "Analytics only — no WhatsApp reply is sent for non-triggered messages"
@@ -720,13 +886,9 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ to: $json.execution?.data?.resultData?.runData?.['WhatsApp Webhook']?.[0]?.data?.main?.[0]?.[0]?.json?.body?.sender ?? '', type: 'text', text: { body: 'માફ કરશો, કંઈક ગડબડ થઈ ગઈ. (Sorry, something went wrong. Please try again.)' } }) }}",
+        "jsonBody": "={{ JSON.stringify({ to: $json.execution?.data?.resultData?.runData?.['WhatsApp Webhook']?.[0]?.data?.main?.[0]?.[0]?.json?.body?.sender ?? '', type: 'text', text: { body: 'ಮಾಫ ಕರಶೋ, ಕಂಇಕ ಗಡಬಡ ಥಈ ಗಈ. (Sorry, something went wrong. Please try again.)' } }) }}",
         "options": {
-          "retry": {
-            "enabled": true,
-            "maxTries": 3,
-            "waitBetweenTries": 2000
-          }
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 2000 }
         }
       }
     }
@@ -755,8 +917,9 @@
         [{ "node": "Get SubMenu", "type": "main", "index": 0 }],
         [{ "node": "Store Customer Selection", "type": "main", "index": 0 }],
         [{ "node": "Store Product Selection", "type": "main", "index": 0 }],
-        [{ "node": "Create Order Guided", "type": "main", "index": 0 }],
-        [{ "node": "Send Cancellation", "type": "main", "index": 0 }]
+        [{ "node": "Read Session for Confirm", "type": "main", "index": 0 }],
+        [{ "node": "Send Cancellation", "type": "main", "index": 0 }],
+        [{ "node": "Send Edit Prompt", "type": "main", "index": 0 }]
       ]
     },
     "Get SubMenu": {
@@ -766,20 +929,51 @@
     },
     "AI Classify": {
       "main": [
+        [{ "node": "Extract Order Entities", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract Order Entities": {
+      "main": [
         [{ "node": "AI Decision Router", "type": "main", "index": 0 }]
       ]
     },
     "AI Decision Router": {
       "main": [
         [{ "node": "Create Order AI", "type": "main", "index": 0 }],
-        [{ "node": "Send Confirm Buttons", "type": "main", "index": 0 }],
-        [{ "node": "Send Clarification", "type": "main", "index": 0 }],
+        [{ "node": "Store Pending Order", "type": "main", "index": 0 }],
+        [{ "node": "Get AI Clarification", "type": "main", "index": 0 }],
         [{ "node": "Send Main Menu", "type": "main", "index": 0 }]
       ]
     },
     "Create Order AI": {
       "main": [
-        [{ "node": "Send Order Confirmation Template", "type": "main", "index": 0 }]
+        [{ "node": "Send Order Success", "type": "main", "index": 0 }]
+      ]
+    },
+    "Store Pending Order": {
+      "main": [
+        [{ "node": "Send Confirm Buttons", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get AI Clarification": {
+      "main": [
+        [{ "node": "Send Clarification Message", "type": "main", "index": 0 }]
+      ]
+    },
+    "Read Session for Confirm": {
+      "main": [
+        [{ "node": "Session Valid Check", "type": "main", "index": 0 }]
+      ]
+    },
+    "Session Valid Check": {
+      "main": [
+        [{ "node": "Create Order From Confirm", "type": "main", "index": 0 }],
+        [{ "node": "Send Session Expired", "type": "main", "index": 0 }]
+      ]
+    },
+    "Create Order From Confirm": {
+      "main": [
+        [{ "node": "Send Confirm Order Success", "type": "main", "index": 0 }]
       ]
     },
     "Error Trigger": {

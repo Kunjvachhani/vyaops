@@ -29,7 +29,7 @@ export type Change = {
 
 export type AuditEntry = {
   organization_id: string
-  user_id: string
+  user_id?: string  // omit for system/WhatsApp actions — stored as NULL in audit_log
   action: AuditAction
   entity_type: AuditEntityType
   entity_id: string
@@ -98,7 +98,7 @@ export async function logAudit(entry: AuditEntry): Promise<void> {
     table_name: TABLE_NAME[entry.entity_type],
     record_id: entry.entity_id,
     action: DB_ACTION[entry.action],
-    changed_by: entry.user_id,
+    changed_by: entry.user_id ?? null,
     changed_by_source: source,
     old_values: oldValues as Json,
     new_values: newValues as Json,

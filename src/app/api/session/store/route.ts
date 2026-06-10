@@ -4,17 +4,29 @@ import { adminClient } from '@/lib/supabase/admin'
 import { requireInternalAuth } from '@/lib/utils/internal-auth'
 import type { Json } from '@/types/database'
 
-// Persists one piece of guided-flow state (e.g. selected_customer_id) for a
-// conversation, keyed by (orgId, sender). Read-modify-write merges into the
-// existing session JSON; the row is the single live session per sender.
-const RequestSchema = z.object({
-  orgId: z.string().uuid(),
-  sender: z.string().min(5),
-  key: z.string().min(1).max(64),
-  value: z.union([z.string(), z.number(), z.boolean(), z.null()]),
-})
+// Persists guided-flow state for a conversation, keyed by (orgId, sender).
+// Supports two modes:
+//   - Single key: { key, value } — merges one field into existing session state
+//   - Bulk:       { state }      — merges an entire object into existing session state
+//
+// Both modes accept an optional ttl_seconds override (default: 3600 = 1 hour).
+// The order-confirm flow uses ttl_seconds: 600 (10 min) for faster expiry.
 
-const SESSION_TTL_MS = 60 * 60 * 1000 // 1 hour
+const ScalarValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()])
+
+const RequestSchema = z
+  .object({
+    orgId: z.string().uuid(),
+    sender: z.string().min(5),
+    key: z.string().min(1).max(64).optional(),
+    value: ScalarValueSchema.optional(),
+    state: z.record(ScalarValueSchema).optional(),
+    ttl_seconds: z.number().int().positive().max(3600).optional(),
+  })
+  .refine(
+    (d) => (d.key !== undefined && d.value !== undefined) || d.state !== undefined,
+    { message: 'Provide either (key + value) or state for bulk update' }
+  )
 
 export async function POST(request: NextRequest) {
   const unauthorized = requireInternalAuth(request)
@@ -35,7 +47,8 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const { orgId, sender, key, value } = parsed.data
+  const { orgId, sender, key, value, state: bulkState, ttl_seconds } = parsed.data
+  const ttlMs = (ttl_seconds ?? 3600) * 1000
 
   try {
     const { data: existing } = await adminClient
@@ -46,7 +59,10 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     const currentState = (existing?.state as Record<string, Json> | null) ?? {}
-    const nextState: Record<string, Json> = { ...currentState, [key]: value }
+
+    const nextState: Record<string, Json> = bulkState
+      ? { ...currentState, ...(bulkState as Record<string, Json>) }
+      : { ...currentState, [key!]: value as Json }
 
     const { error } = await adminClient
       .from('whatsapp_sessions')
@@ -55,7 +71,7 @@ export async function POST(request: NextRequest) {
           organization_id: orgId,
           sender_phone: sender,
           state: nextState as Json,
-          expires_at: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
+          expires_at: new Date(Date.now() + ttlMs).toISOString(),
         },
         { onConflict: 'organization_id,sender_phone' }
       )
@@ -67,7 +83,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ stored: true, state: nextState })
   } catch (error) {
     return NextResponse.json(
-      { error: 'Session store failed', code: 'SESSION_ERROR', details: error instanceof Error ? error.message : 'Unknown' },
+      {
+        error: 'Session store failed',
+        code: 'SESSION_ERROR',
+        details: error instanceof Error ? error.message : 'Unknown',
+      },
       { status: 500 }
     )
   }
