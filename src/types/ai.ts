@@ -39,6 +39,8 @@ export interface EvalResult {
 
 export type IntentType =
   | 'NEW_ORDER'
+  | 'MODIFY_ORDER'
+  | 'CANCEL_ORDER'
   | 'ORDER_STATUS'
   | 'VENDOR_ORDER'
   | 'PRODUCTION_UPDATE'
@@ -48,6 +50,33 @@ export type IntentType =
   | 'COMPLIANCE_QUERY'
   | 'GENERAL_QUERY'
   | 'UNKNOWN'
+
+// ─── Owner-reply classifier ───────────────────────────────────────────────────
+
+export type OwnerReplySignal = 'AFFIRM' | 'DECLINE' | 'UNRELATED'
+
+export interface OwnerReplyClassification {
+  signal: OwnerReplySignal
+  confidence: number
+}
+
+// ─── Confirmation parser ──────────────────────────────────────────────────────
+
+export interface ConfirmationParseResult {
+  confirmed: boolean
+  promisedDate: string | null  // ISO date YYYY-MM-DD or null
+  cancel: boolean
+}
+
+// ─── Modification parser ──────────────────────────────────────────────────────
+
+export type ModificationMode = 'add' | 'replace' | 'ambiguous'
+
+export interface ModificationParseResult {
+  mode: ModificationMode
+  newQuantity: number
+  confidence: number
+}
 
 export type DetectedLanguage = 'gujarati' | 'hindi' | 'hinglish' | 'english'
 
@@ -99,6 +128,8 @@ export interface ModelResponse {
 
 const INTENT_VALUES = [
   'NEW_ORDER',
+  'MODIFY_ORDER',
+  'CANCEL_ORDER',
   'ORDER_STATUS',
   'VENDOR_ORDER',
   'PRODUCTION_UPDATE',
@@ -108,6 +139,23 @@ const INTENT_VALUES = [
   'COMPLIANCE_QUERY',
   'GENERAL_QUERY',
 ] as const
+
+export const OwnerReplyClassificationSchema = z.object({
+  signal: z.enum(['AFFIRM', 'DECLINE', 'UNRELATED']),
+  confidence: z.number().min(0).max(1),
+})
+
+export const ConfirmationParseResultSchema = z.object({
+  confirmed: z.boolean(),
+  promised_date: z.string().nullable(),
+  cancel: z.boolean(),
+})
+
+export const ModificationParseResultSchema = z.object({
+  mode: z.enum(['add', 'replace', 'ambiguous']),
+  new_quantity: z.number().int().positive(),
+  confidence: z.number().min(0).max(1),
+})
 
 const LANGUAGE_VALUES = ['gujarati', 'hindi', 'hinglish', 'english'] as const
 
@@ -120,6 +168,7 @@ export const DeepSeekRawEntitiesSchema = z.object({
   delivery_date_raw: z.string().nullable().optional(),
   price_raw: z.number().nullable().optional(),
   defect_type: z.string().nullable().optional(),
+  order_ref_raw: z.string().nullable().optional(),
 })
 
 export const DeepSeekClassifyResponseSchema = z.object({

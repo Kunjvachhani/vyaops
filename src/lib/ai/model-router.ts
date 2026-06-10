@@ -187,8 +187,10 @@ function capDecision(decision: EvalGateDecision, max: EvalGateDecision): EvalGat
 }
 
 // Order intents require a resolved counterparty (+ product) before we ever
-// auto-process or confirm. Sales orders need a customer; purchases need a vendor.
-const CUSTOMER_ORDER_INTENTS = new Set<IntentType>(['NEW_ORDER'])
+// reach 'confirm' or 'auto_process'. Note: 'auto_process' means "post draft
+// immediately" in the new model — it NEVER means "skip the owner's ok".
+// Sales orders need a customer; purchases need a vendor.
+const CUSTOMER_ORDER_INTENTS = new Set<IntentType>(['NEW_ORDER', 'MODIFY_ORDER', 'CANCEL_ORDER'])
 const VENDOR_ORDER_INTENTS = new Set<IntentType>(['VENDOR_ORDER'])
 
 type ResolutionFlags = {
