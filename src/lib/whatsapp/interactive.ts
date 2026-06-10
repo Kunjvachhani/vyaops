@@ -250,3 +250,126 @@ export function buildClarification(options: ClarificationOption[]): InteractiveM
     buttons,
   }
 }
+
+// ─── 7. Order Draft (posted to chat after owner AFFIRM) ───────────────────────
+// Visible to both customer and owner. Owner replies "ok" or "ok <date>" to confirm.
+
+export interface OrderDraftData {
+  quantity: number
+  productName: string
+  customerName: string
+  unit?: string
+  urgent?: boolean
+}
+
+export function buildOrderDraft(data: OrderDraftData): string {
+  const unit = data.unit ?? 'pcs'
+  const urgentTag = data.urgent ? ' | Urgent' : ''
+  return [
+    '📋 Order Draft',
+    '',
+    `${data.quantity} × ${data.productName} (${unit})${urgentTag}`,
+    `Customer: ${data.customerName}`,
+    'Ready by: — (reply "ok <date>" to set)',
+    '',
+    'Reply "ok" to confirm · /cancel to discard',
+  ].join('\n')
+}
+
+export interface ModificationDraftData {
+  mode: 'add' | 'replace' | 'ambiguous'
+  originalQuantity: number
+  newQuantity: number
+  productName: string
+  customerName: string
+  unit?: string
+}
+
+export function buildModificationDraft(data: ModificationDraftData): string {
+  const unit = data.unit ?? 'pcs'
+
+  if (data.mode === 'ambiguous') {
+    const totalIfAdd = data.originalQuantity + data.newQuantity
+    return [
+      '📋 Modification Draft',
+      '',
+      `Customer: ${data.customerName}`,
+      `Product: ${data.productName}`,
+      '',
+      `Total ${totalIfAdd} ke total ${data.newQuantity}?`,
+      `Reply "ok ${totalIfAdd}" (add) · "ok ${data.newQuantity}" (replace) · /cancel`,
+    ].join('\n')
+  }
+
+  const finalQty =
+    data.mode === 'add' ? data.originalQuantity + data.newQuantity : data.newQuantity
+  const label = data.mode === 'add' ? `+${data.newQuantity} added` : 'quantity updated'
+
+  return [
+    '📋 Modification Draft',
+    '',
+    `${finalQty} × ${data.productName} (${unit}) — ${label}`,
+    `Customer: ${data.customerName}`,
+    '',
+    'Reply "ok" to confirm · /cancel to discard',
+  ].join('\n')
+}
+
+export interface CancellationDraftData {
+  orderNumber: string
+  quantity: number
+  productName: string
+  customerName: string
+  unit?: string
+  quantityProduced?: number
+}
+
+export function buildCancellationDraft(data: CancellationDraftData): string {
+  const unit = data.unit ?? 'pcs'
+  const lines = [
+    '📋 Cancellation Draft',
+    '',
+    `Order: ${data.orderNumber}`,
+    `${data.quantity} × ${data.productName} (${unit})`,
+    `Customer: ${data.customerName}`,
+  ]
+
+  if (data.quantityProduced && data.quantityProduced > 0) {
+    lines.push(``, `⚠️ ${data.quantityProduced} pcs already produced`)
+  }
+
+  lines.push('', 'Reply "ok" to cancel order · /cancel to keep order')
+  return lines.join('\n')
+}
+
+// ─── 8. Owner /status summary ─────────────────────────────────────────────────
+
+export interface StatusOrderItem {
+  orderNumber: string
+  quantity: number
+  productName: string
+  unit: string
+  quantityProduced: number
+  deliveryDate: string | null
+}
+
+export interface StatusSummaryData {
+  customerName: string
+  orders: StatusOrderItem[]
+}
+
+export function buildStatusSummary(data: StatusSummaryData): string {
+  if (data.orders.length === 0) {
+    return `📦 Your Orders — ${data.customerName}\n\nNo open orders.`
+  }
+
+  const lines = [`📦 Your Orders — ${data.customerName}`, '']
+
+  for (const o of data.orders) {
+    const progress = o.quantityProduced > 0 ? ` — ${o.quantityProduced} done` : ''
+    const readyBy = o.deliveryDate ? ` ✅ Ready: ${o.deliveryDate}` : ''
+    lines.push(`${o.orderNumber}: ${o.quantity} × ${o.productName}${progress}${readyBy}`)
+  }
+
+  return lines.join('\n')
+}

@@ -86,7 +86,9 @@ function logOutboundMessage(
       organization_id: organizationId,
       message_id: messageId,
       direction: 'outbound',
+      is_echo: false,
       sender_phone: phone,
+      chat_phone: phone,   // for outbound, phone IS the customer (recipient)
       message_type: messageType,
       message_body: body ?? null,
       was_triggered: false,
