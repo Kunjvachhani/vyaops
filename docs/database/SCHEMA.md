@@ -41,9 +41,11 @@ tier_valid_until    TIMESTAMPTZ                      -- subscription expiry
 billing_status      TEXT NOT NULL DEFAULT 'active'   -- active | grace_period | suspended | cancelled
 razorpay_customer_id    TEXT                         -- Razorpay customer ID
 razorpay_subscription_id TEXT                        -- Razorpay subscription ID
-whatsapp_phone      TEXT                             -- WhatsApp Business number (Coexistence)
-whatsapp_connected  BOOLEAN DEFAULT FALSE
-auto_mode_enabled   BOOLEAN DEFAULT FALSE            -- AI auto-reply toggle
+whatsapp_phone              TEXT                     -- WhatsApp Business number (legacy, kept for display)
+whatsapp_phone_number_id    TEXT UNIQUE              -- Meta/Dualhook Phone Number ID → PRIMARY org lookup key for inbound webhooks
+whatsapp_display_number     TEXT                     -- Fallback: human-readable number for org lookup when phone_number_id not yet set
+whatsapp_connected          BOOLEAN DEFAULT FALSE
+auto_mode_enabled           BOOLEAN DEFAULT FALSE    -- AI auto-reply toggle (deprecated in new model — kept for future use)
 language_preference TEXT NOT NULL DEFAULT 'gu'        -- gu | hi | en
 timezone            TEXT NOT NULL DEFAULT 'Asia/Kolkata'
 onboarded_at        TIMESTAMPTZ
@@ -327,24 +329,48 @@ Raw message log for AI training and audit trail.
 ```
 id                  UUID PK DEFAULT gen_random_uuid()
 organization_id     UUID NOT NULL
-message_id          TEXT NOT NULL                    -- Meta message ID
+message_id          TEXT NOT NULL                    -- Meta message ID (wamid)
 direction           TEXT NOT NULL                    -- inbound | outbound
-sender_phone        TEXT NOT NULL
+sender_phone        TEXT NOT NULL                    -- for inbound: customer phone; for outbound: business number
+chat_phone          TEXT                             -- customer-side phone for both directions (for correlation)
+is_echo             BOOLEAN NOT NULL DEFAULT FALSE   -- TRUE when received via smb_message_echoes (owner's reply)
 message_type        TEXT NOT NULL                    -- text | image | document | interactive | template
 message_body        TEXT
 media_url           TEXT
-intent_classified   TEXT                             -- NEW_ORDER | PRODUCTION_UPDATE | etc.
+intent_classified   TEXT                             -- NEW_ORDER | MODIFY_ORDER | CANCEL_ORDER | etc.
 intent_confidence   NUMERIC(3,2)                     -- 0.00 to 1.00
 eval_score          NUMERIC(3,2)                     -- eval gate score
-was_triggered       BOOLEAN DEFAULT FALSE            -- was this a triggered (actionable) message?
+was_triggered       BOOLEAN DEFAULT FALSE            -- TRUE for owner slash commands (/status, /cancel, /edit, /order)
 was_processed       BOOLEAN DEFAULT FALSE            -- did we create a DB record from this?
 processing_result   JSONB                            -- extracted entities, matched records
 created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 ```
-**Note:** APPEND-ONLY for inbound. No updates, no deletes. This is your AI training data.
+**Note:** APPEND-ONLY. No updates, no deletes. Primary use: AI training data + echo loop guard.
+
+## TABLE: pending_orders
+State machine for customer-detected actionable messages awaiting owner confirmation.
+```
+id                  UUID PK
+organization_id     UUID NOT NULL FK → organizations(id)
+customer_id         UUID FK → customers(id)          -- NULL if sender unknown/unmatched
+customer_phone      TEXT NOT NULL                    -- normalized customer phone (chat identity)
+intent              TEXT NOT NULL CHECK IN ('NEW_ORDER','MODIFY_ORDER','CANCEL_ORDER')
+target_order_id     UUID FK → orders(id)             -- for MODIFY_ORDER / CANCEL_ORDER
+extraction          JSONB NOT NULL DEFAULT '{}'       -- full AI output: entities, confidences, eval score
+state               TEXT NOT NULL DEFAULT 'detected'
+                    CHECK IN ('detected','draft_posted','confirmed','cancelled','expired')
+source_message_id   TEXT NOT NULL                    -- wamid of the customer message that triggered this
+draft_message_id    TEXT                             -- wamid of the draft we sent (set when state→draft_posted)
+confirmed_order_id  UUID FK → orders(id)             -- set when state→confirmed
+expires_at          TIMESTAMPTZ NOT NULL DEFAULT now() + INTERVAL '24 hours'
+created_at, updated_at, deleted_at (standard)
+```
+**Partial unique index:** only ONE row in (`detected`, `draft_posted`) per (organization_id, customer_phone).
+New detection while one is active: expire old one in application code, then insert.
+**RLS:** enabled, same tenant-isolation pattern as other tables.
 
 ## TABLE: whatsapp_sessions
-Conversation state for WhatsApp guided flows (Opt-In Trigger Model). One live
+Conversation state for backward-compatibility. One live
 session per (organization_id, sender_phone); short-lived and overwritten per flow.
 Written only by the `/api/session/store` callback via the service-role client.
 ```
