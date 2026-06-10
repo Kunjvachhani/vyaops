@@ -146,6 +146,7 @@ npm run test:benchmark         # AI eval benchmark suite
 - Foreign keys enforce referential integrity.
 - Idempotency keys for order creation: hash(org_id + customer_id + product_id + qty + date_hour).
 - Optimistic locking: use `updated_at` as version check for concurrent edits.
+- `pending_orders` table: only ONE row in (`detected`, `draft_posted`) per (organization_id, customer_phone) — enforced by partial unique index. New detection supersedes old one (old → `expired`) in application code before insert.
 
 ---
 
@@ -157,19 +158,23 @@ npm run test:benchmark         # AI eval benchmark suite
 - System prompts stored in `docs/ai/PROMPT_LIBRARY.md`. Never hardcode.
 - Cache identical AI inputs with 5-min TTL.
 - All API calls: 3 retries, exponential backoff (1s→2s→4s), 30s timeout.
-- Primary failure → fallback model. Eval gate failure → guided prompts (never auto-process).
+- Primary failure → fallback model. Eval gate failure → default to `confirm` band (never auto-process without a successful eval).
+- **Eval gate `auto_process` means "post the draft immediately without asking for clarification" — it NEVER means "skip the owner's ok" and create an order directly.**
+- **Informational customer queries (ORDER_STATUS, INVENTORY_CHECK, GENERAL_QUERY) are NEVER auto-answered to the customer. They are logged only. Only `/status` typed by the OWNER in a specific chat produces an automated informational reply, scoped strictly to that chat's customer.**
 
 ---
 
 ## WhatsApp Rules
 
 - All outbound templates pre-approved by Meta (defined in `docs/whatsapp/TEMPLATES.md`).
-- Bot NEVER auto-replies to non-triggered messages (Opt-In Trigger Model).
-- Interactive messages dynamically generated based on org tier + master data.
+- **Rule A — Bot silence:** Bot NEVER sends a message to a customer chat except: (1) the order/modification/cancellation draft after owner affirmation, (2) the confirmation message after owner "ok", (3) the `/status` summary when the owner types `/status` in that chat. No greetings, no auto-replies, no "I didn't understand".
+- **Rule B — Draft + ok always required:** NO state-changing DB write (order create/modify/cancel) ever happens without the visible draft + explicit owner "ok" loop. This applies regardless of eval-gate score. `auto_process` decision means "post the draft without asking for clarification" — never "skip the owner's ok".
+- **Rule C — Echo loop prevention (critical):** The bot's own outbound messages come back as echoes. Before processing any echo, check whether its wamid matches a logged outbound message in `whatsapp_messages` — if yes, ignore it completely. Also ignore any echo whose text matches draft/confirmation message signatures as a second layer. Without this, the bot replies to itself forever.
 - Webhook payloads arrive directly from Meta via Dualhook's Webhook Override. Verify using META_WHATSAPP_APP_SECRET (X-Hub-Signature-256 header).
-- Webhook acknowledged in <1 second. Processing is async.
-- **Orchestration lives in n8n (`n8n/workflows/master-message-handler.json`), proxied through Next.js.** The webhook verifies + forwards `{message, sender, orgId, messageType, isTriggered}` to the n8n webhook; n8n routes (guided / AI / log-only) and calls BACK into Next.js API routes — never Meta or DeepSeek directly. All outbound WhatsApp + AI flows through the audited app layer.
-- Internal callback routes (`/api/ai`, `/api/whatsapp/send`, `/api/whatsapp/menu`, `/api/session/store`, `/api/analytics/log-intent`, `/api/errors/log`) authenticate the `x-internal-api-key` header against `INTERNAL_API_KEY`. Never expose these to the browser.
+- Webhook acknowledged in <1 second. Processing is async (Next.js `after()`).
+- **Org lookup by `metadata.phone_number_id` → `organizations.whatsapp_phone_number_id`.** Never look up org by sender phone — sender is now always the customer.
+- **Orchestration lives in n8n (`n8n/workflows/master-message-handler.json`), proxied through Next.js.** The webhook verifies + forwards `{message, chatPhone, orgId, messageType, isCommand?}` to n8n; n8n routes (customer_text / owner_echo / log-only) and calls BACK into `/api/whatsapp/flow` — never Meta or DeepSeek directly. All outbound WhatsApp + AI flows through the audited app layer.
+- Internal callback routes (`/api/whatsapp/flow`, `/api/ai`, `/api/whatsapp/send`, `/api/analytics/log-intent`, `/api/errors/log`) authenticate the `x-internal-api-key` header against `INTERNAL_API_KEY`. Never expose these to the browser.
 
 ---
 
