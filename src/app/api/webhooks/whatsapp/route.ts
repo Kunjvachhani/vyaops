@@ -2,9 +2,11 @@ import { after } from 'next/server'
 import { NextRequest } from 'next/server'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { adminClient } from '@/lib/supabase/admin'
+import { normalizePhone } from '@/lib/utils/phone'
 import type {
   MetaWebhookPayload,
   WhatsAppInboundMessage,
+  WhatsAppEchoMessage,
   WhatsAppStatusUpdate,
 } from '@/types/whatsapp'
 
@@ -16,9 +18,7 @@ function maskPhone(phone: string): string {
 function verifySignature(rawBody: string, signatureHeader: string | null): boolean {
   const secret = process.env.META_WHATSAPP_APP_SECRET
   if (!signatureHeader || !secret) return false
-
   const expected = 'sha256=' + createHmac('sha256', secret).update(rawBody).digest('hex')
-
   try {
     return timingSafeEqual(Buffer.from(signatureHeader), Buffer.from(expected))
   } catch {
@@ -26,11 +26,16 @@ function verifySignature(rawBody: string, signatureHeader: string | null): boole
   }
 }
 
-function isTriggerMessage(msg: WhatsAppInboundMessage): boolean {
-  if (msg.type === 'interactive' || msg.type === 'button') return true
-  if (msg.context != null) return true
-  if (msg.type === 'text' && msg.text.body.trimStart().startsWith('/')) return true
-  return false
+function isEchoField(field: string): boolean {
+  // Accept both field names until Dualhook's exact name is confirmed in Phase 8.
+  return field === 'smb_message_echoes' || field === 'message_echoes'
+}
+
+// Known draft/confirmation message prefixes — secondary echo loop guard.
+const BOT_MESSAGE_PREFIXES = ['📋 Order Draft', '✅ Order Confirmed', '📦 Your Orders']
+
+function looksLikeBotMessage(text: string): boolean {
+  return BOT_MESSAGE_PREFIXES.some((p) => text.startsWith(p))
 }
 
 function extractMessageBody(msg: WhatsAppInboundMessage): string | null {
@@ -44,32 +49,25 @@ function extractMessageBody(msg: WhatsAppInboundMessage): string | null {
   return null
 }
 
-// Maps a Meta inbound message to the n8n forward contract's messageType plus
-// the selection ids the guided-flow branch parses.
-type N8nMessageShape = {
-  messageType: 'text' | 'button_reply' | 'list_reply'
+type N8nShape = {
+  messageType: 'customer_text' | 'button_reply' | 'list_reply'
   buttonReply?: { id: string; title: string }
   listReply?: { rowId: string; title: string }
 }
 
-function toN8nMessageShape(msg: WhatsAppInboundMessage): N8nMessageShape {
+function toN8nShape(msg: WhatsAppInboundMessage): N8nShape {
   if (msg.type === 'interactive') {
     const ia = msg.interactive
-    if (ia.type === 'button_reply') {
+    if (ia.type === 'button_reply')
       return { messageType: 'button_reply', buttonReply: { id: ia.button_reply.id, title: ia.button_reply.title } }
-    }
-    if (ia.type === 'list_reply') {
+    if (ia.type === 'list_reply')
       return { messageType: 'list_reply', listReply: { rowId: ia.list_reply.id, title: ia.list_reply.title } }
-    }
   }
-  if (msg.type === 'button') {
+  if (msg.type === 'button')
     return { messageType: 'button_reply', buttonReply: { id: msg.button.payload, title: msg.button.text } }
-  }
-  return { messageType: 'text' }
+  return { messageType: 'customer_text' }
 }
 
-// Forwards the normalized message to the n8n master handler. Fire-and-forget:
-// a forwarding failure must never break inbound acknowledgement.
 async function forwardToN8n(payload: Record<string, unknown>): Promise<void> {
   const url = process.env.N8N_WEBHOOK_URL
   if (!url) {
@@ -90,74 +88,173 @@ async function forwardToN8n(payload: Record<string, unknown>): Promise<void> {
   }
 }
 
+async function lookupOrg(
+  phoneNumberId: string,
+  displayPhoneNumber: string
+): Promise<{ id: string; tier: string; language_preference: string } | null> {
+  // Primary: match by phone_number_id (the Meta internal ID — unique per org)
+  const { data: byId } = await adminClient
+    .from('organizations')
+    .select('id, tier, language_preference')
+    .eq('whatsapp_phone_number_id', phoneNumberId)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (byId) return byId
+
+  // Fallback: display number (human-readable, set during onboarding)
+  const { data: byDisplay } = await adminClient
+    .from('organizations')
+    .select('id, tier, language_preference')
+    .eq('whatsapp_display_number', displayPhoneNumber)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  return byDisplay ?? null
+}
+
 async function processStatusUpdates(statuses: WhatsAppStatusUpdate[]): Promise<void> {
   for (const status of statuses) {
     console.log('[whatsapp] delivery status:', status.status, 'for', maskPhone(status.recipient_id))
   }
 }
 
-async function processInboundMessage(msg: WhatsAppInboundMessage): Promise<void> {
-  const maskedPhone = maskPhone(msg.from)
+async function processCustomerMessage(
+  msg: WhatsAppInboundMessage,
+  orgId: string
+): Promise<void> {
+  const customerPhone = normalizePhone(msg.from)
+  const maskedPhone = maskPhone(customerPhone)
 
   try {
-    const { data: org, error: orgError } = await adminClient
-      .from('organizations')
-      .select('id, tier, auto_mode_enabled')
-      .eq('whatsapp_phone', msg.from)
+    // Resolve customer by normalized phone
+    const { data: customer } = await adminClient
+      .from('customers')
+      .select('id, name')
+      .eq('organization_id', orgId)
+      .eq('phone', customerPhone)
       .is('deleted_at', null)
-      .single()
+      .maybeSingle()
 
-    if (orgError || !org) {
-      console.log('[whatsapp] no org found for sender:', maskedPhone)
-      return
-    }
-
-    const triggered = isTriggerMessage(msg)
     const messageBody = extractMessageBody(msg)
 
+    // Log to whatsapp_messages
     const { error: insertError } = await adminClient.from('whatsapp_messages').insert({
       message_id: msg.id,
-      organization_id: org.id,
-      sender_phone: msg.from,
+      organization_id: orgId,
+      sender_phone: customerPhone,
+      chat_phone: customerPhone,
       direction: 'inbound',
+      is_echo: false,
       message_type: msg.type,
       message_body: messageBody,
-      was_triggered: triggered,
+      was_triggered: false,
       was_processed: false,
     })
 
     if (insertError) {
-      console.error('[whatsapp] failed to log message:', {
+      console.error('[whatsapp] failed to log customer message:', {
         error: insertError.message,
-        org_id: org.id,
+        org_id: orgId,
         phone: maskedPhone,
-        type: msg.type,
       })
     }
 
-    // Forward every message to the n8n master handler. n8n routes by
-    // (messageType, isTriggered): guided flow, AI flow, or Branch C log-only.
-    // Non-triggered messages are forwarded too (n8n logs them, sends no reply).
-    const shape = toN8nMessageShape(msg)
+    if (!customer) {
+      // Unknown sender — log only, no pending order, no reply (Rule A)
+      console.log('[whatsapp] unknown customer sender:', maskedPhone, '— log only, no action')
+      return
+    }
+
+    const shape = toN8nShape(msg)
     await forwardToN8n({
-      message: messageBody ?? '',
-      sender: msg.from,
-      orgId: org.id,
       messageType: shape.messageType,
-      isTriggered: triggered,
+      message: messageBody ?? '',
+      chatPhone: customerPhone,
+      orgId,
+      messageId: msg.id,
+      customerId: customer.id,
       ...(shape.buttonReply ? { buttonReply: shape.buttonReply } : {}),
       ...(shape.listReply ? { listReply: shape.listReply } : {}),
     })
 
-    console.log('[whatsapp] forwarded to n8n:', maskedPhone, {
-      org_id: org.id,
+    console.log('[whatsapp] customer message forwarded:', maskedPhone, {
+      org_id: orgId,
+      customer_id: customer.id,
       type: shape.messageType,
-      triggered,
     })
   } catch (err) {
-    console.error('[whatsapp] unhandled error processing message:', {
+    console.error('[whatsapp] error processing customer message:', {
       phone: maskedPhone,
-      type: msg.type,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+}
+
+async function processEcho(
+  echo: WhatsAppEchoMessage,
+  orgId: string
+): Promise<void> {
+  const chatPhone = normalizePhone(echo.to ?? '')
+  const maskedChat = maskPhone(chatPhone)
+  const echoText = echo.text?.body ?? ''
+
+  try {
+    // ─── LOOP GUARD LAYER 1: wamid already logged as outbound ───────────────
+    const { data: existing } = await adminClient
+      .from('whatsapp_messages')
+      .select('id')
+      .eq('message_id', echo.id)
+      .eq('direction', 'outbound')
+      .maybeSingle()
+
+    if (existing) {
+      console.log('[whatsapp] echo loop guard: wamid already logged outbound — skipping', echo.id)
+      return
+    }
+
+    // ─── LOOP GUARD LAYER 2: text signature matches bot draft/confirm ────────
+    if (looksLikeBotMessage(echoText)) {
+      console.log('[whatsapp] echo loop guard: text signature matches bot message — skipping')
+      return
+    }
+
+    // Log to whatsapp_messages
+    const isCommand = echoText.trimStart().startsWith('/')
+    const { error: insertError } = await adminClient.from('whatsapp_messages').insert({
+      message_id: echo.id,
+      organization_id: orgId,
+      sender_phone: normalizePhone(echo.from),
+      chat_phone: chatPhone,
+      direction: 'outbound',
+      is_echo: true,
+      message_type: echo.type,
+      message_body: echoText,
+      was_triggered: isCommand,
+      was_processed: false,
+    })
+
+    if (insertError) {
+      console.error('[whatsapp] failed to log echo:', {
+        error: insertError.message,
+        org_id: orgId,
+        chat: maskedChat,
+      })
+    }
+
+    await forwardToN8n({
+      messageType: 'owner_echo',
+      message: echoText,
+      chatPhone,
+      orgId,
+      messageId: echo.id,
+      isCommand,
+    })
+
+    console.log('[whatsapp] owner echo forwarded:', maskedChat, { org_id: orgId, isCommand })
+  } catch (err) {
+    console.error('[whatsapp] error processing echo:', {
+      chat: maskedChat,
       error: err instanceof Error ? err.message : String(err),
     })
   }
@@ -166,18 +263,41 @@ async function processInboundMessage(msg: WhatsAppInboundMessage): Promise<void>
 async function _processWebhookPayload(payload: MetaWebhookPayload): Promise<void> {
   for (const entry of payload.entry) {
     for (const change of entry.changes) {
-      if (change.field !== 'messages') continue
       const { value } = change
+      const { phone_number_id, display_phone_number } = value.metadata
 
-      if (value.statuses?.length) {
-        await processStatusUpdates(value.statuses)
+      if (change.field === 'messages') {
+        if (value.statuses?.length) {
+          await processStatusUpdates(value.statuses)
+        }
+
+        if (!value.messages?.length) continue
+
+        const org = await lookupOrg(phone_number_id, display_phone_number)
+        if (!org) {
+          console.log('[whatsapp] no org for phone_number_id:', phone_number_id, '/', maskPhone(display_phone_number))
+          continue
+        }
+
+        for (const msg of value.messages) {
+          await processCustomerMessage(msg, org.id)
+        }
+      } else if (isEchoField(change.field)) {
+        if (!value.messages?.length) continue
+
+        const org = await lookupOrg(phone_number_id, display_phone_number)
+        if (!org) {
+          console.log('[whatsapp] no org for echo phone_number_id:', phone_number_id)
+          continue
+        }
+
+        for (const raw of value.messages) {
+          // Echo messages have a 'to' field — cast through unknown since the
+          // WhatsAppInboundMessage union doesn't include it.
+          await processEcho(raw as unknown as WhatsAppEchoMessage, org.id)
+        }
       }
-
-      if (!value.messages?.length) continue
-
-      for (const msg of value.messages) {
-        await processInboundMessage(msg)
-      }
+      // All other change.field values (statuses in separate change, etc.): silently ignore
     }
   }
 }
@@ -202,7 +322,6 @@ export async function POST(request: NextRequest): Promise<Response> {
     return new Response('Bad Request', { status: 400 })
   }
 
-  // Dualhook test pings don't carry Meta HMAC signature — let them through
   const isDualhookPing = request.headers.get('x-dualhook-event') === 'test_ping'
 
   if (!isDualhookPing && !verifySignature(rawBody, request.headers.get('x-hub-signature-256'))) {

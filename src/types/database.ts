@@ -689,6 +689,8 @@ export type Database = {
           updated_at: string
           whatsapp_connected: boolean
           whatsapp_phone: string | null
+          whatsapp_phone_number_id: string | null
+          whatsapp_display_number: string | null
         }
         Insert: {
           address?: string | null
@@ -714,6 +716,8 @@ export type Database = {
           updated_at?: string
           whatsapp_connected?: boolean
           whatsapp_phone?: string | null
+          whatsapp_phone_number_id?: string | null
+          whatsapp_display_number?: string | null
         }
         Update: {
           address?: string | null
@@ -739,6 +743,8 @@ export type Database = {
           updated_at?: string
           whatsapp_connected?: boolean
           whatsapp_phone?: string | null
+          whatsapp_phone_number_id?: string | null
+          whatsapp_display_number?: string | null
         }
         Relationships: []
       }
@@ -1218,12 +1224,14 @@ export type Database = {
       }
       whatsapp_messages: {
         Row: {
+          chat_phone: string | null
           created_at: string
           direction: string
           eval_score: number | null
           id: string
           intent_classified: string | null
           intent_confidence: number | null
+          is_echo: boolean
           media_url: string | null
           message_body: string | null
           message_id: string
@@ -1235,12 +1243,14 @@ export type Database = {
           was_triggered: boolean
         }
         Insert: {
+          chat_phone?: string | null
           created_at?: string
           direction: string
           eval_score?: number | null
           id?: string
           intent_classified?: string | null
           intent_confidence?: number | null
+          is_echo?: boolean
           media_url?: string | null
           message_body?: string | null
           message_id: string
@@ -1252,12 +1262,14 @@ export type Database = {
           was_triggered?: boolean
         }
         Update: {
+          chat_phone?: string | null
           created_at?: string
           direction?: string
           eval_score?: number | null
           id?: string
           intent_classified?: string | null
           intent_confidence?: number | null
+          is_echo?: boolean
           media_url?: string | null
           message_body?: string | null
           message_id?: string
@@ -1269,6 +1281,65 @@ export type Database = {
           was_triggered?: boolean
         }
         Relationships: []
+      }
+      pending_orders: {
+        Row: {
+          id: string
+          organization_id: string
+          customer_id: string | null
+          customer_phone: string
+          intent: string
+          target_order_id: string | null
+          extraction: Json
+          state: string
+          source_message_id: string
+          draft_message_id: string | null
+          confirmed_order_id: string | null
+          expires_at: string
+          created_at: string
+          updated_at: string
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          customer_id?: string | null
+          customer_phone: string
+          intent: string
+          target_order_id?: string | null
+          extraction?: Json
+          state?: string
+          source_message_id: string
+          draft_message_id?: string | null
+          confirmed_order_id?: string | null
+          expires_at?: string
+          created_at?: string
+          updated_at?: string
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          customer_id?: string | null
+          customer_phone?: string
+          intent?: string
+          target_order_id?: string | null
+          extraction?: Json
+          state?: string
+          source_message_id?: string
+          draft_message_id?: string | null
+          confirmed_order_id?: string | null
+          expires_at?: string
+          created_at?: string
+          updated_at?: string
+          deleted_at?: string | null
+        }
+        Relationships: [
+          { foreignKeyName: 'pending_orders_organization_id_fkey'; columns: ['organization_id']; referencedRelation: 'organizations'; referencedColumns: ['id'] },
+          { foreignKeyName: 'pending_orders_customer_id_fkey'; columns: ['customer_id']; referencedRelation: 'customers'; referencedColumns: ['id'] },
+          { foreignKeyName: 'pending_orders_target_order_id_fkey'; columns: ['target_order_id']; referencedRelation: 'orders'; referencedColumns: ['id'] },
+          { foreignKeyName: 'pending_orders_confirmed_order_id_fkey'; columns: ['confirmed_order_id']; referencedRelation: 'orders'; referencedColumns: ['id'] }
+        ]
       }
       whatsapp_sessions: {
         Row: {

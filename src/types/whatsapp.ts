@@ -153,6 +153,19 @@ export interface WhatsAppStatusUpdate {
   errors?: Array<{ code: number; title: string }>
 }
 
+// ─── Echo payload (owner's outbound from phone) ───────────────────────────────
+
+// Echo messages have the same structure as inbound text messages but include
+// a 'to' field (the customer phone) since 'from' is the business number.
+export interface WhatsAppEchoMessage {
+  id: string
+  from: string       // business/owner phone number
+  to: string         // customer phone — this is the chat_phone
+  timestamp: string
+  type: 'text' | 'image' | 'document' | 'interactive' | 'template'
+  text?: { body: string }
+}
+
 export interface MetaWebhookPayload {
   object: string
   entry: Array<{
@@ -165,7 +178,31 @@ export interface MetaWebhookPayload {
         messages?: WhatsAppInboundMessage[]
         statuses?: WhatsAppStatusUpdate[]
       }
+      // field is 'messages' for customer inbound,
+      // 'smb_message_echoes' or 'message_echoes' for owner outbound echoes.
+      // We accept both echo field names until Dualhook's exact name is confirmed.
       field: string
     }>
   }>
+}
+
+// Normalized n8n forward contract for customer messages
+export interface N8nCustomerMessagePayload {
+  messageType: 'customer_text' | 'button_reply' | 'list_reply'
+  message: string
+  chatPhone: string
+  orgId: string
+  messageId: string
+  buttonReply?: { id: string; title: string }
+  listReply?: { rowId: string; title: string }
+}
+
+// Normalized n8n forward contract for owner echoes
+export interface N8nOwnerEchoPayload {
+  messageType: 'owner_echo'
+  message: string
+  chatPhone: string
+  orgId: string
+  messageId: string
+  isCommand: boolean
 }
