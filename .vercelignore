@@ -1,5 +1,5 @@
 .codegraph
-n8n
-tests
-docs
-supabase
+/n8n
+/tests
+/docs
+/supabase
