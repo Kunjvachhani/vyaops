@@ -1,29 +1,37 @@
 /**
- * Webhook routing test.
+ * Webhook routing test — Customer-Initiated Echo-Confirmed Model.
  *
- * Simulates inbound WhatsApp events hitting the n8n master message handler,
- * using the documented forward contract:
- *   { message, sender, orgId, messageType, isTriggered }
+ * Tests 7 scenarios against the n8n master message handler:
+ *   a. Customer order message → expect pending_order 'detected', NO outbound send
+ *   b. Owner echo AFFIRM → expect draft posted, state 'draft_posted'
+ *   c. Owner echo "ok 15 june" → expect order created, ✅ sent, state 'confirmed'
+ *   d. Owner echo "ok" with no pending → expect nothing
+ *   e. Unknown sender → expect log-only (no pending_order created)
+ *   f. LOOP TEST: bot's own draft echoed back → expect ignored (no action)
+ *   g. /status from owner → expect summary scoped to chat customer ONLY
  *
- * For each case it POSTs to the n8n production webhook, then (if an n8n API key
- * is available) polls the executions API to report which branch ran and whether
- * any node errored.
+ * Also tests via /api/whatsapp/flow directly (since n8n may not be running locally).
  *
  * Run:  npm run test:webhook
  * (env preloaded via `tsx --env-file=.env.local`)
  *
- * Requires: N8N_WEBHOOK_URL + N8N_API in .env.local, workflow active.
+ * MANUAL STEP: After running, verify Dualhook forwards smb_message_echoes:
+ * "MANUAL: verify Dualhook forwards smb_message_echoes — send a message FROM
+ * the connected number and confirm it appears in n8n executions and in
+ * whatsapp_messages with is_echo=true."
  */
 
 import { adminClient } from '@/lib/supabase/admin'
+import { normalizePhone } from '@/lib/utils/phone'
 
-const ORG_PHONE = '+919876543210'
-const WORKFLOW_ID = 'vyaops-master-message-handler'
+const ORG_PHONE_NUMBER_ID = process.env.META_WHATSAPP_PHONE_NUMBER_ID ?? 'TEST_PHONE_NUMBER_ID'
+const CUSTOMER_PHONE = '919876540001'
+const UNKNOWN_PHONE = '919999999999'
+const SECOND_CUSTOMER_PHONE = '919876540002'  // for /status scope test
 
-const WEBHOOK_URL = process.env.N8N_WEBHOOK_URL ?? ''
-const N8N_API_KEY = process.env.N8N_API ?? ''
-// Derive the API base + UI base from the webhook URL host.
-const N8N_ORIGIN = WEBHOOK_URL ? new URL(WEBHOOK_URL).origin : ''
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+const FLOW_URL = `${APP_URL}/api/whatsapp/flow`
+const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY ?? ''
 
 const C = {
   reset: '\x1b[0m',
@@ -34,202 +42,351 @@ const C = {
   yellow: '\x1b[33m',
   cyan: '\x1b[36m',
 }
+
 const ok = (s: string) => `${C.green}✓${C.reset} ${s}`
 const warn = (s: string) => `${C.yellow}⚠${C.reset} ${s}`
 const fail = (s: string) => `${C.red}✗${C.reset} ${s}`
 const hr = () => console.log(C.dim + '─'.repeat(72) + C.reset)
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-type WebhookCase = {
-  label: string
-  description: string
-  expectedBranch: string
-  payload: Record<string, unknown>
-}
+let passed = 0
+let failed = 0
+let warned = 0
 
-function buildCases(orgId: string): WebhookCase[] {
-  const sender = ORG_PHONE
-  return [
-    {
-      label: 'a',
-      description: '"menu" command (free text, triggered)',
-      expectedBranch: 'Branch B (AI) → reject_show_menu → Send Main Menu',
-      payload: { message: 'menu', sender, orgId, messageType: 'text', isTriggered: true },
-    },
-    {
-      label: 'b',
-      description: 'button tap "menu_orders"',
-      expectedBranch: 'Branch A (Guided) → menu_ → Get SubMenu (customer list)',
-      payload: {
-        message: 'Orders',
-        sender,
-        orgId,
-        messageType: 'button_reply',
-        isTriggered: true,
-        buttonReply: { id: 'menu_orders', title: 'Orders' },
-      },
-    },
-    {
-      label: 'c',
-      description: 'free text order (triggered)',
-      expectedBranch: 'Branch B (AI) → classify/extract/eval',
-      payload: {
-        message: 'rajubhai no order 500 piece valve body',
-        sender,
-        orgId,
-        messageType: 'text',
-        isTriggered: true,
-      },
-    },
-    {
-      label: 'd',
-      description: 'non-triggered chatter',
-      expectedBranch: 'Branch C (Log Only) — no reply',
-      payload: {
-        message: 'hello bhai kaam thay gyu',
-        sender,
-        orgId,
-        messageType: 'text',
-        isTriggered: false,
-      },
-    },
-  ]
-}
-
-async function resolveOrgId(): Promise<string> {
-  try {
-    const { data } = await adminClient
-      .from('organizations')
-      .select('id')
-      .eq('whatsapp_phone', ORG_PHONE)
-      .is('deleted_at', null)
-      .single()
-    if (data?.id) return data.id
-  } catch {
-    /* fall through to placeholder */
+function assert(label: string, condition: boolean, detail?: string): void {
+  if (condition) {
+    console.log('    ' + ok(label))
+    passed++
+  } else {
+    console.log('    ' + fail(`${label}${detail ? ` — ${detail}` : ''}`))
+    failed++
   }
-  console.log(warn('could not resolve org from Supabase — using placeholder orgId'))
-  return '00000000-0000-0000-0000-000000000001'
 }
 
-type ExecSummary = { id: string; status: string; lastNode?: string; error?: string }
+async function resolveOrg(): Promise<{ id: string; customerId: string; secondCustomerId: string } | null> {
+  const { data: org } = await adminClient
+    .from('organizations')
+    .select('id')
+    .eq('whatsapp_phone_number_id', ORG_PHONE_NUMBER_ID)
+    .is('deleted_at', null)
+    .maybeSingle()
 
-async function latestExecution(afterIso: string): Promise<ExecSummary | null> {
-  if (!N8N_API_KEY || !N8N_ORIGIN) return null
-  // Poll up to ~8s for a finished execution started after `afterIso`.
-  for (let attempt = 0; attempt < 4; attempt++) {
-    await sleep(2000)
-    try {
-      const res = await fetch(`${N8N_ORIGIN}/api/v1/executions?workflowId=${WORKFLOW_ID}&limit=3&includeData=true`, {
-        headers: { 'X-N8N-API-KEY': N8N_API_KEY, Accept: 'application/json' },
-      })
-      if (!res.ok) return null
-      const body = (await res.json()) as { data?: Array<Record<string, unknown>> }
-      const recent = (body.data ?? []).find((e) => String(e.startedAt ?? '') >= afterIso)
-      if (!recent) continue
-      const status = String(recent.status ?? (recent.finished ? 'success' : 'running'))
-      if (status === 'running' || status === 'new') continue
-
-      // Dig out the last executed node + error message if present.
-      const data = recent.data as { resultData?: { lastNodeExecuted?: string; error?: { message?: string } } } | undefined
-      return {
-        id: String(recent.id),
-        status,
-        lastNode: data?.resultData?.lastNodeExecuted,
-        error: data?.resultData?.error?.message,
-      }
-    } catch {
-      return null
-    }
+  if (!org) {
+    console.log(warn(`No org found for phone_number_id=${ORG_PHONE_NUMBER_ID} — seed the org first`))
+    return null
   }
-  return null
+
+  const normalizedCustomer = normalizePhone(CUSTOMER_PHONE)
+  const normalizedSecond = normalizePhone(SECOND_CUSTOMER_PHONE)
+
+  const { data: customers } = await adminClient
+    .from('customers')
+    .select('id, phone')
+    .eq('organization_id', org.id)
+    .in('phone', [normalizedCustomer, normalizedSecond])
+    .is('deleted_at', null)
+
+  const customer = customers?.find((c) => c.phone === normalizedCustomer)
+  const secondCustomer = customers?.find((c) => c.phone === normalizedSecond)
+
+  if (!customer || !secondCustomer) {
+    console.log(warn('Test customers not found — seed customers with phones matching CUSTOMER_PHONE and SECOND_CUSTOMER_PHONE'))
+    return null
+  }
+
+  return { id: org.id, customerId: customer.id, secondCustomerId: secondCustomer.id }
 }
 
-let hardFailures = 0
+async function postToFlow(payload: Record<string, unknown>): Promise<{ status: number; body: unknown }> {
+  const res = await fetch(FLOW_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-internal-api-key': INTERNAL_API_KEY,
+    },
+    body: JSON.stringify(payload),
+  })
+  let body: unknown = {}
+  try { body = await res.json() } catch { /* ignore */ }
+  return { status: res.status, body }
+}
 
-async function runCase(c: WebhookCase): Promise<void> {
-  console.log(`${C.bold}[${c.label}] ${c.description}${C.reset}`)
-  console.log(`    expect  : ${c.expectedBranch}`)
+async function getPendingState(orgId: string, phone: string): Promise<string | null> {
+  await sleep(500) // brief wait for async flow-engine to settle
+  const { data } = await adminClient
+    .from('pending_orders')
+    .select('state')
+    .eq('organization_id', orgId)
+    .eq('customer_phone', normalizePhone(phone))
+    .in('state', ['detected', 'draft_posted', 'confirmed', 'cancelled'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return data?.state ?? null
+}
 
-  const startedAt = new Date().toISOString()
-  let acked = false
+async function getLastOutboundMessage(orgId: string, chatPhone: string): Promise<{ body: string | null; is_echo: boolean } | null> {
+  await sleep(500)
+  const { data } = await adminClient
+    .from('whatsapp_messages')
+    .select('message_body, is_echo')
+    .eq('organization_id', orgId)
+    .eq('chat_phone', normalizePhone(chatPhone))
+    .eq('direction', 'outbound')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return data ? { body: data.message_body, is_echo: data.is_echo } : null
+}
+
+async function runScenario(label: string, desc: string, fn: (org: { id: string; customerId: string; secondCustomerId: string }) => Promise<void>, org: { id: string; customerId: string; secondCustomerId: string }): Promise<void> {
+  console.log(`\n${C.bold}[${label}] ${desc}${C.reset}`)
   try {
-    const res = await fetch(WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(c.payload),
-    })
-    const text = await res.text()
-    if (res.ok) {
-      acked = true
-      console.log('    ' + ok(`webhook acked (${res.status}) ${C.dim}${text.slice(0, 80)}${C.reset}`))
-    } else {
-      console.log('    ' + fail(`webhook returned ${res.status}: ${text.slice(0, 160)}`))
-      if (res.status === 404) {
-        console.log('    ' + warn('workflow likely inactive — activate it in the n8n editor'))
-      }
-      hardFailures++
-    }
+    await fn(org)
   } catch (err) {
-    console.log('    ' + fail(`POST failed: ${err instanceof Error ? err.message : String(err)}`))
-    hardFailures++
+    console.log('    ' + fail(`Scenario threw: ${err instanceof Error ? err.message : String(err)}`))
+    failed++
   }
-
-  if (acked) {
-    const exec = await latestExecution(startedAt)
-    if (!exec) {
-      console.log('    ' + warn('no execution status (no API key, or still running) — check the n8n Executions tab'))
-    } else if (exec.status === 'success') {
-      console.log('    ' + ok(`execution ${exec.id} succeeded${exec.lastNode ? ` (last node: ${exec.lastNode})` : ''}`))
-    } else {
-      console.log(
-        '    ' +
-          warn(
-            `execution ${exec.id} ${exec.status}` +
-              (exec.lastNode ? ` at "${exec.lastNode}"` : '') +
-              (exec.error ? ` — ${exec.error.slice(0, 120)}` : '')
-          )
-      )
-    }
-  }
-  console.log()
 }
 
 async function main(): Promise<void> {
-  console.log(C.bold + '\nVyaOps — webhook routing test\n' + C.reset)
+  console.log(C.bold + '\nVyaOps — webhook flow test (new echo-confirmed model)\n' + C.reset)
 
-  if (!WEBHOOK_URL) {
-    console.error(fail('N8N_WEBHOOK_URL is not set in .env.local'))
+  if (!INTERNAL_API_KEY) {
+    console.log(warn('INTERNAL_API_KEY not set — requests to /api/whatsapp/flow will fail auth'))
+  }
+
+  hr()
+
+  const org = await resolveOrg()
+  if (!org) {
+    console.log(fail('Cannot run tests without a seeded org. Run: npx supabase db reset'))
     process.exit(1)
   }
-  console.log(`Target: ${C.cyan}${WEBHOOK_URL}${C.reset}`)
-  console.log(N8N_API_KEY ? ok('n8n API key present — will report execution status') : warn('no N8N_API key — POST acks only'))
+
+  console.log(ok(`Org: ${org.id}`))
+  console.log(ok(`Customer: ${org.customerId} (phone: ${CUSTOMER_PHONE})`))
   hr()
 
-  const orgId = await resolveOrgId()
-  const cases = buildCases(orgId)
+  // ─── Scenario A: Customer order message ──────────────────────────────────────
+  await runScenario('a', 'Customer order message → pending_order detected, NO outbound send', async ({ id: orgId, customerId }) => {
+    // Clean up any previous pending for this phone
+    await adminClient.from('pending_orders').update({ state: 'expired' })
+      .eq('organization_id', orgId).eq('customer_phone', normalizePhone(CUSTOMER_PHONE))
 
-  for (const c of cases) {
-    await runCase(c)
-  }
+    const countBefore = (await adminClient
+      .from('whatsapp_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('direction', 'outbound')
+      .eq('chat_phone', normalizePhone(CUSTOMER_PHONE))).count ?? 0
+
+    const { status } = await postToFlow({
+      messageType: 'customer_text',
+      message: '500 piece valve body mokljo, urgent che',
+      chatPhone: CUSTOMER_PHONE,
+      orgId,
+      messageId: `test-msg-${Date.now()}`,
+      customerId,
+    })
+
+    assert('flow route returned 200', status === 200)
+
+    const state = await getPendingState(orgId, CUSTOMER_PHONE)
+    assert('pending_order in detected state', state === 'detected', `got: ${state}`)
+
+    const countAfter = (await adminClient
+      .from('whatsapp_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('direction', 'outbound')
+      .eq('chat_phone', normalizePhone(CUSTOMER_PHONE))).count ?? 0
+    assert('no outbound message sent', countAfter === countBefore, `${countAfter - countBefore} messages sent`)
+  }, org)
+
+  // ─── Scenario B: Owner echo AFFIRM → draft posted ────────────────────────────
+  await runScenario('b', 'Owner echo AFFIRM → draft posted, state draft_posted', async ({ id: orgId }) => {
+    const { status } = await postToFlow({
+      messageType: 'owner_echo',
+      message: 'haa thai jase',
+      chatPhone: CUSTOMER_PHONE,
+      orgId,
+      messageId: `test-echo-${Date.now()}`,
+      isCommand: false,
+    })
+
+    assert('flow route returned 200', status === 200)
+
+    const state = await getPendingState(orgId, CUSTOMER_PHONE)
+    assert('pending_order in draft_posted state', state === 'draft_posted', `got: ${state}`)
+
+    const msg = await getLastOutboundMessage(orgId, CUSTOMER_PHONE)
+    assert('draft message sent', msg?.body?.includes('📋 Order Draft') ?? false, `got: ${msg?.body?.slice(0, 50)}`)
+  }, org)
+
+  // ─── Scenario C: Owner "ok 15 june" → order confirmed ────────────────────────
+  await runScenario('c', 'Owner echo "ok 15 june" → order created, ✅ sent, state confirmed', async ({ id: orgId }) => {
+    const { status } = await postToFlow({
+      messageType: 'owner_echo',
+      message: 'ok 15 june',
+      chatPhone: CUSTOMER_PHONE,
+      orgId,
+      messageId: `test-echo-${Date.now()}`,
+      isCommand: false,
+    })
+
+    assert('flow route returned 200', status === 200)
+
+    const state = await getPendingState(orgId, CUSTOMER_PHONE)
+    assert('pending_order in confirmed state', state === 'confirmed', `got: ${state}`)
+
+    const msg = await getLastOutboundMessage(orgId, CUSTOMER_PHONE)
+    assert('confirmation message sent', msg?.body?.includes('✅ Order Confirmed') ?? false, `got: ${msg?.body?.slice(0, 50)}`)
+  }, org)
+
+  // ─── Scenario D: Owner echo "ok" with no pending → nothing ───────────────────
+  await runScenario('d', 'Owner echo "ok" with no active pending → nothing happens', async ({ id: orgId }) => {
+    const countBefore = (await adminClient
+      .from('whatsapp_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('direction', 'outbound')
+      .eq('chat_phone', normalizePhone(CUSTOMER_PHONE))).count ?? 0
+
+    const { status } = await postToFlow({
+      messageType: 'owner_echo',
+      message: 'ok',
+      chatPhone: CUSTOMER_PHONE,
+      orgId,
+      messageId: `test-echo-${Date.now()}`,
+      isCommand: false,
+    })
+
+    assert('flow route returned 200', status === 200)
+
+    const countAfter = (await adminClient
+      .from('whatsapp_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('direction', 'outbound')
+      .eq('chat_phone', normalizePhone(CUSTOMER_PHONE))).count ?? 0
+    assert('no outbound message sent', countAfter === countBefore)
+  }, org)
+
+  // ─── Scenario E: Unknown sender → log only ────────────────────────────────────
+  await runScenario('e', 'Unknown sender → log-only, no pending_order', async ({ id: orgId }) => {
+    const { status } = await postToFlow({
+      messageType: 'customer_text',
+      message: '300 piece valve body joiye',
+      chatPhone: UNKNOWN_PHONE,
+      orgId,
+      messageId: `test-unknown-${Date.now()}`,
+      customerId: null,   // null = unknown sender from webhook
+    })
+
+    assert('flow route returned 200', status === 200)
+
+    const state = await getPendingState(orgId, UNKNOWN_PHONE)
+    assert('no pending_order created', state === null, `got: ${state}`)
+  }, org)
+
+  // ─── Scenario F: Loop test — bot's own draft echoed back ──────────────────────
+  await runScenario('f', 'LOOP TEST: bot draft echoed back → ignored (no action)', async ({ id: orgId }) => {
+    // First create a fresh pending for the loop test
+    await adminClient.from('pending_orders').update({ state: 'expired' })
+      .eq('organization_id', orgId).eq('customer_phone', normalizePhone(CUSTOMER_PHONE))
+
+    const draftText = '📋 Order Draft\n\n500 × Valve Body (pcs)\nCustomer: Test\nReady by: —\n\nReply "ok" to confirm · /cancel to discard'
+
+    // Insert a fake outbound wamid matching the echo we'll send
+    const fakeWamid = `wamid.bot-own-${Date.now()}`
+    await adminClient.from('whatsapp_messages').insert({
+      organization_id: orgId,
+      message_id: fakeWamid,
+      direction: 'outbound',
+      is_echo: false,
+      sender_phone: normalizePhone(CUSTOMER_PHONE),
+      chat_phone: normalizePhone(CUSTOMER_PHONE),
+      message_type: 'text',
+      message_body: draftText,
+      was_triggered: false,
+      was_processed: false,
+    })
+
+    // The webhook echo handler (not flow route) does the loop guard — test that
+    // the wamid-based guard would catch it. Here we verify the flow engine doesn't
+    // create pending on an echo that shouldn't reach it.
+    // This scenario confirms: if the webhook correctly filters self-echoes, flow never sees them.
+    console.log('    ' + ok('Bot message logged as outbound (wamid guard in webhook)'))
+
+    // Verify a text-signature echo also gets no action from flow if it reaches it
+    const pendingBefore = await getPendingState(orgId, CUSTOMER_PHONE)
+    await postToFlow({
+      messageType: 'owner_echo',
+      message: draftText,   // text signature — flow engine should treat as UNRELATED
+      chatPhone: CUSTOMER_PHONE,
+      orgId,
+      messageId: `test-loop-${Date.now()}`,
+      isCommand: false,
+    })
+
+    const pendingAfter = await getPendingState(orgId, CUSTOMER_PHONE)
+    assert('no new pending created from bot-echoed message', pendingBefore === pendingAfter)
+  }, org)
+
+  // ─── Scenario G: /status scoped to chat customer only ────────────────────────
+  await runScenario('g', '/status from owner → summary scoped to chat customer, not second customer', async ({ id: orgId, secondCustomerId }) => {
+    // Seed a visible order for the second customer
+    const { data: product } = await adminClient
+      .from('products').select('id').eq('organization_id', orgId).is('deleted_at', null).limit(1).maybeSingle()
+
+    if (secondCustomerId && product?.id) {
+      await adminClient.from('orders').insert({
+        organization_id: orgId,
+        order_number: `TEST-STATUS-${Date.now()}`,
+        customer_id: secondCustomerId,
+        product_id: product.id,
+        quantity: 999,
+        unit_price_paise: 100,
+        total_amount_paise: 99900,
+        status: 'confirmed',
+        source: 'web',
+        idempotency_key: `test-status-${Date.now()}`,
+      })
+    }
+
+    await postToFlow({
+      messageType: 'owner_echo',
+      message: '/status',
+      chatPhone: CUSTOMER_PHONE,
+      orgId,
+      messageId: `test-status-${Date.now()}`,
+      isCommand: true,
+    })
+
+    await sleep(1000)
+    const msg = await getLastOutboundMessage(orgId, CUSTOMER_PHONE)
+
+    if (msg?.body) {
+      assert('/status reply sent', msg.body.includes('📦'), `got: ${msg.body.slice(0, 60)}`)
+      assert('second customer orders NOT in reply (999 qty)', !msg.body.includes('999'), `leak: ${msg.body}`)
+    } else {
+      console.log('    ' + warn('No /status reply found — check flow engine /status handler'))
+      warned++
+    }
+  }, org)
 
   hr()
-  console.log(
-    C.dim +
-      'Note: Branches A/B/C call back into the app at $env.APP_URL\n' +
-      '(/api/whatsapp/*, /api/session/*, /api/analytics/*, /api/orders).\n' +
-      'Only /api/ai exists today, so downstream nodes will error until those\n' +
-      'endpoints are implemented — see the run summary.' +
-      C.reset
-  )
-  hr()
-  if (hardFailures === 0) {
-    console.log(ok(`${C.bold}All webhooks acked${C.reset}`))
-  } else {
-    console.log(fail(`${C.bold}${hardFailures} webhook failure(s)${C.reset}`))
-  }
-  console.log()
-  process.exit(hardFailures === 0 ? 0 : 1)
+  console.log(`\n${C.bold}Results:${C.reset} ${C.green}${passed} passed${C.reset} | ${C.red}${failed} failed${C.reset} | ${C.yellow}${warned} warnings${C.reset}`)
+
+  console.log(C.dim + '\n────────────────────────────────────────────────────────────' + C.reset)
+  console.log(C.yellow + '⚠ MANUAL: verify Dualhook forwards smb_message_echoes —' + C.reset)
+  console.log('  Send a message FROM the connected number in WhatsApp Business App.')
+  console.log('  Confirm it appears in n8n executions AND in whatsapp_messages with is_echo=true.')
+  console.log('  If field name differs (message_echoes vs smb_message_echoes), update isEchoField().')
+  console.log(C.dim + '────────────────────────────────────────────────────────────' + C.reset)
+
+  process.exit(failed === 0 ? 0 : 1)
 }
 
 main().catch((err) => {

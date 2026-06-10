@@ -13,9 +13,10 @@
  */
 
 import { routeAndProcess } from '@/lib/ai/model-router'
+import { classifyOwnerReply } from '@/lib/ai/deepseek'
 import { matchCustomer, matchProduct } from '@/lib/utils/fuzzy-match'
 import { adminClient } from '@/lib/supabase/admin'
-import type { OrgContext, RouteAndProcessResult } from '@/types/ai'
+import type { OrgContext, RouteAndProcessResult, OwnerReplySignal } from '@/types/ai'
 
 const ORG_PHONE = '+919876543210'
 
@@ -68,6 +69,42 @@ const CASES: PipelineCase[] = [
     expectComposite: 'below_0.70',
     expectIntent: 'NEW_ORDER',
     mustNotCreateOrder: true,
+  },
+  // New intents
+  {
+    label: 'f',
+    language: 'Gujarati',
+    message: 'haji 200 piece add karva che us 500 ke order ma',
+    expectComposite: 'above_0.70',
+    expectIntent: 'MODIFY_ORDER',
+  },
+  {
+    label: 'g',
+    language: 'Gujarati',
+    message: '450 j joiye, badli nakho — valve body no order',
+    expectComposite: 'above_0.70',
+    expectIntent: 'MODIFY_ORDER',
+  },
+  {
+    label: 'h',
+    language: 'Hindi',
+    message: 'ola 300 piece wala order cancel karo',
+    expectComposite: 'above_0.70',
+    expectIntent: 'CANCEL_ORDER',
+  },
+  {
+    label: 'i',
+    language: 'Gujarati',
+    message: '500 piece no order rokvi do, nahi joiye hve',
+    expectComposite: 'above_0.70',
+    expectIntent: 'CANCEL_ORDER',
+  },
+  {
+    label: 'j',
+    language: 'Hinglish',
+    message: 'bhai order ka kya hua, kab tak tayar hoga',
+    expectComposite: 'above_0.70',
+    expectIntent: 'ORDER_STATUS',
   },
 ]
 
@@ -225,6 +262,86 @@ async function runFuzzySection(orgId: string): Promise<void> {
   }
 }
 
+type OwnerReplyCase = {
+  label: string
+  language: string
+  customerMessage: string
+  pendingSummary: string
+  ownerReply: string
+  expectedSignal: OwnerReplySignal
+}
+
+const OWNER_REPLY_CASES: OwnerReplyCase[] = [
+  {
+    label: 'OR-1',
+    language: 'Gujarati',
+    customerMessage: '500 piece valve body mokljo',
+    pendingSummary: 'NEW_ORDER: qty=500 product=valve body',
+    ownerReply: 'haa thai jase',
+    expectedSignal: 'AFFIRM',
+  },
+  {
+    label: 'OR-2',
+    language: 'Hinglish',
+    customerMessage: '300 piece casting order',
+    pendingSummary: 'NEW_ORDER: qty=300 product=casting',
+    ownerReply: 'ok karu chu',
+    expectedSignal: 'AFFIRM',
+  },
+  {
+    label: 'OR-3',
+    language: 'Gujarati',
+    customerMessage: '200 piece gear blank joiye',
+    pendingSummary: 'NEW_ORDER: qty=200 product=gear blank',
+    ownerReply: 'na nai thay, maari factory band che',
+    expectedSignal: 'DECLINE',
+  },
+  {
+    label: 'OR-4',
+    language: 'Gujarati',
+    customerMessage: '500 piece valve body urgent',
+    pendingSummary: 'NEW_ORDER: qty=500 product=valve body',
+    ownerReply: 'kale vat karu',
+    expectedSignal: 'UNRELATED',
+  },
+  {
+    label: 'OR-5',
+    language: 'Gujarati',
+    customerMessage: '450 piece casting',
+    pendingSummary: 'NEW_ORDER: qty=450 product=casting',
+    ownerReply: 'haa pan be divas lagse, thay jase',
+    expectedSignal: 'AFFIRM',
+  },
+  {
+    label: 'OR-6',
+    language: 'Gujarati',
+    customerMessage: '600 piece valve body',
+    pendingSummary: 'NEW_ORDER: qty=600 product=valve body',
+    ownerReply: 'mehulbhai kal milva aavjo, kaam ni vaat karvani che',
+    expectedSignal: 'UNRELATED',
+  },
+]
+
+async function runOwnerReplySection(): Promise<void> {
+  hr()
+  console.log(C.bold + 'Owner-reply classifier tests' + C.reset)
+  for (const c of OWNER_REPLY_CASES) {
+    try {
+      const result = await classifyOwnerReply(c.customerMessage, c.pendingSummary, c.ownerReply)
+      const match = result.signal === c.expectedSignal
+      const icon = match ? ok : fail
+      console.log(
+        `  [${c.label}] ${c.language}  reply=${JSON.stringify(c.ownerReply)}\n` +
+        `    ${icon(`signal=${result.signal} (conf ${result.confidence.toFixed(2)}) expected=${c.expectedSignal}`)}`
+      )
+      if (!match) hardFailures++
+    } catch (err) {
+      console.log(`  [${c.label}] ` + fail(`threw: ${err instanceof Error ? err.message : String(err)}`))
+      hardFailures++
+    }
+  }
+}
+
 async function main(): Promise<void> {
   console.log(C.bold + '\nVyaOps — AI pipeline test\n' + C.reset)
   hr()
@@ -247,6 +364,7 @@ async function main(): Promise<void> {
   }
 
   await runFuzzySection(orgId)
+  await runOwnerReplySection()
 
   hr()
   if (hardFailures === 0) {

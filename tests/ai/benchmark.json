@@ -1,11 +1,29 @@
 {
-  "version": "1.0.0",
-  "description": "Initial benchmark - 50 test cases required before launch. Start with these 5, add 45 more during Sprint 4.",
+  "version": "1.1.0",
+  "description": "Benchmark test cases. 20 total: 5 original + 5 MODIFY_ORDER + 5 CANCEL_ORDER + 5 owner-reply classification.",
   "test_cases": [
     {"id":"TC-001","source":"manual","difficulty":"easy","raw_message":"rajubhai no order 500 piece valve body kal deliver","expected_intent":"NEW_ORDER","expected_entities":{"customer_name_raw":"rajubhai","product_raw":"valve body","quantity":500},"tags":["hinglish","order"]},
     {"id":"TC-002","source":"manual","difficulty":"easy","raw_message":"aaj batch 48 mein 200 ban gaya 12 reject shrinkage","expected_intent":"PRODUCTION_UPDATE","expected_entities":{"batch_number":"48","quantity_produced":200,"quantity_rejected":12,"defect_type":"shrinkage"},"tags":["hinglish","production"]},
     {"id":"TC-003","source":"manual","difficulty":"medium","raw_message":"shah industries ka invoice bhejo 45000 ka","expected_intent":"INVOICE_REQUEST","expected_entities":{"customer_name_raw":"shah industries","amount_raw":"45000"},"tags":["hindi","invoice"]},
     {"id":"TC-004","source":"manual","difficulty":"easy","raw_message":"valve body stock kitna hai","expected_intent":"INVENTORY_CHECK","expected_entities":{"product_raw":"valve body"},"tags":["hinglish","inventory"]},
-    {"id":"TC-005","source":"manual","difficulty":"hard","raw_message":"happy diwali bhai! party kab hai?","expected_intent":"GENERAL_QUERY","expected_entities":{},"tags":["hindi","non_business"]}
+    {"id":"TC-005","source":"manual","difficulty":"hard","raw_message":"happy diwali bhai! party kab hai?","expected_intent":"GENERAL_QUERY","expected_entities":{},"tags":["hindi","non_business"]},
+
+    {"id":"TC-006","source":"manual","difficulty":"medium","raw_message":"haji 200 piece add karva che, us 500 valve body ke order ma","expected_intent":"MODIFY_ORDER","expected_entities":{"quantity":200,"order_ref_raw":"500 valve body"},"expected_modification_mode":"add","tags":["gujarati","modify_order"]},
+    {"id":"TC-007","source":"manual","difficulty":"hard","raw_message":"haji 450 bhi chahiye","expected_intent":"MODIFY_ORDER","expected_entities":{"quantity":450},"expected_modification_mode":"ambiguous","tags":["hindi","modify_order","ambiguous"]},
+    {"id":"TC-008","source":"manual","difficulty":"medium","raw_message":"450 j joiye, badli nakho — valve body no order","expected_intent":"MODIFY_ORDER","expected_entities":{"quantity":450,"product_raw":"valve body"},"expected_modification_mode":"replace","tags":["gujarati","modify_order"]},
+    {"id":"TC-009","source":"manual","difficulty":"medium","raw_message":"biji 300 piece casting add karo, pehle wala order tha 500","expected_intent":"MODIFY_ORDER","expected_entities":{"quantity":300,"product_raw":"casting","order_ref_raw":"500"},"expected_modification_mode":"add","tags":["hinglish","modify_order"]},
+    {"id":"TC-010","source":"manual","difficulty":"hard","raw_message":"sirf 600 rakhna, 1000 nahi chahiye gear blank","expected_intent":"MODIFY_ORDER","expected_entities":{"quantity":600,"product_raw":"gear blank"},"expected_modification_mode":"replace","tags":["hindi","modify_order"]},
+
+    {"id":"TC-011","source":"manual","difficulty":"medium","raw_message":"ola 500 piece no order cancel karvo che","expected_intent":"CANCEL_ORDER","expected_entities":{"quantity":500,"order_ref_raw":"500 piece"},"tags":["gujarati","cancel_order"]},
+    {"id":"TC-012","source":"manual","difficulty":"medium","raw_message":"300 piece wala casting ka order rok do","expected_intent":"CANCEL_ORDER","expected_entities":{"quantity":300,"product_raw":"casting","order_ref_raw":"300 piece"},"tags":["hindi","cancel_order"]},
+    {"id":"TC-013","source":"manual","difficulty":"hard","raw_message":"pehla order nahi joiye, band karo","expected_intent":"CANCEL_ORDER","expected_entities":{"order_ref_raw":"pehla order"},"tags":["hindi","cancel_order","recency_reference"]},
+    {"id":"TC-014","source":"manual","difficulty":"medium","raw_message":"250 piece no order rokvi do, nahi joiye hve","expected_intent":"CANCEL_ORDER","expected_entities":{"quantity":250,"order_ref_raw":"250 piece"},"tags":["gujarati","cancel_order"]},
+    {"id":"TC-015","source":"manual","difficulty":"easy","raw_message":"valve body no recent order cancel karo","expected_intent":"CANCEL_ORDER","expected_entities":{"product_raw":"valve body","order_ref_raw":"recent order"},"tags":["gujarati","cancel_order"]},
+
+    {"id":"TC-016","source":"manual","difficulty":"owner_reply","raw_message":null,"owner_reply":"haa thai jase","customer_message":"500 piece valve body mokljo","pending_summary":"NEW_ORDER qty=500","expected_signal":"AFFIRM","tags":["gujarati","owner_reply_classifier"]},
+    {"id":"TC-017","source":"manual","difficulty":"owner_reply","raw_message":null,"owner_reply":"ok karu chu","customer_message":"300 piece casting order","pending_summary":"NEW_ORDER qty=300","expected_signal":"AFFIRM","tags":["hinglish","owner_reply_classifier"]},
+    {"id":"TC-018","source":"manual","difficulty":"owner_reply","raw_message":null,"owner_reply":"na nai thay, maari factory band che","customer_message":"200 piece gear blank","pending_summary":"NEW_ORDER qty=200","expected_signal":"DECLINE","tags":["gujarati","owner_reply_classifier"]},
+    {"id":"TC-019","source":"manual","difficulty":"owner_reply","raw_message":null,"owner_reply":"kale vat karu","customer_message":"500 piece valve body urgent","pending_summary":"NEW_ORDER qty=500","expected_signal":"UNRELATED","tags":["gujarati","owner_reply_classifier","unrelated"]},
+    {"id":"TC-020","source":"manual","difficulty":"owner_reply","raw_message":null,"owner_reply":"haa pan be divas lagse","customer_message":"450 piece casting","pending_summary":"NEW_ORDER qty=450","expected_signal":"AFFIRM","tags":["gujarati","owner_reply_classifier","conditional"]}
   ]
 }
