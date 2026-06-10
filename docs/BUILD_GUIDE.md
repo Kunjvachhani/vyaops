@@ -383,10 +383,21 @@ Key tasks:
 ## SPRINT 5 — PRODUCTION + INVENTORY + VENDORS (Weeks 9-10)
 **8-10 sessions**
 
+### Production Planning Model (IMPORTANT — read before building)
+See docs/architecture/SYSTEM_OVERVIEW.md "Production Planning Philosophy" section.
+- `delivery_date` on orders = owner-promised date, set at order confirmation ("ok 15 june")
+- Progress = sum of `production_batches.quantity_produced` per order
+- Dashboard Production page = drag-to-reorder priority queue, advisory warnings only
+- System NEVER auto-suggests dates or auto-commits delivery commitments
+
 Key tasks:
-1. Production batch logging (WhatsApp Flow + free text)
+1. Production batch logging (WhatsApp free text — PRODUCTION_UPDATE intent, not a flow trigger)
 2. Auto-update: order progress + inventory on production log
-3. Production page (web)
+3. Production page (web):
+   - Priority queue sorted by delivery_date (drag to reorder)
+   - Each card: order #, customer, qty remaining, progress bar, promised date
+   - Advisory pace warning: "Promised 15 June — at current pace: 18 June ⚠️" (display only)
+   - NO auto-schedule button, NO date suggestion UI
 4. Quality page (web) — rejection trends, defect Pareto, ₹ Saved counter
 5. Inventory system + auto-updates + low stock alerts
 6. Inventory page (web)
