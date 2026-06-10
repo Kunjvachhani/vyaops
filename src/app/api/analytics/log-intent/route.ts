@@ -2,16 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireInternalAuth } from '@/lib/utils/internal-auth'
 
-// Branch C of the message handler: log non-triggered (and other) message
-// classifications for product analytics. Sent to PostHog (the project's
-// analytics tool) — never to the DB, and never with raw message content or
-// full phone numbers (privacy: see CLAUDE.md security rule #8).
+// Log Only branch of the n8n master handler: logs unrouted message events to
+// PostHog for product analytics. Never to the DB, never with raw message content
+// or full phone numbers (privacy: see CLAUDE.md security rule #8).
 const RequestSchema = z.object({
   orgId: z.string().uuid(),
-  sender: z.string().optional(),
+  chatPhone: z.string().optional(),  // replaces old 'sender' — masked before logging
   message: z.string().optional(),
   messageType: z.string(),
-  isTriggered: z.boolean(),
   intent: z.string().optional(),
   timestamp: z.string().optional(),
 })
@@ -38,13 +36,12 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const { orgId, message, messageType, isTriggered, intent } = parsed.data
+  const { orgId, message, messageType, intent } = parsed.data
 
   // Privacy-safe properties only: no raw body, no phone. Length is a useful proxy.
   const properties = {
     organization_id: orgId,
     message_type: messageType,
-    is_triggered: isTriggered,
     intent: intent ?? null,
     message_length: message?.length ?? 0,
   }

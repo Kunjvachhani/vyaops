@@ -7,8 +7,7 @@ import { handleCustomerMessage, handleOwnerEcho } from '@/lib/whatsapp/flow-engi
 // n8n branches on messageType: 'customer_text' | 'owner_echo'.
 // Errors are logged to Sentry via console; never surfaced to the customer chat (Rule A).
 
-const CustomerMessageSchema = z.object({
-  messageType: z.enum(['customer_text', 'button_reply', 'list_reply']),
+const BaseCustomerSchema = z.object({
   message: z.string(),
   chatPhone: z.string().min(5),
   orgId: z.string().uuid(),
@@ -16,21 +15,18 @@ const CustomerMessageSchema = z.object({
   customerId: z.string().uuid().nullable().optional(),
 })
 
-const OwnerEchoSchema = z.object({
-  messageType: z.literal('owner_echo'),
-  message: z.string(),
-  chatPhone: z.string().min(5),
-  orgId: z.string().uuid(),
-  messageId: z.string().min(1),
-  isCommand: z.boolean().optional(),
-})
-
 const RequestSchema = z.discriminatedUnion('messageType', [
-  CustomerMessageSchema,
-  OwnerEchoSchema,
-  // button_reply and list_reply treated as customer_text for flow routing
-  z.object({ messageType: z.literal('button_reply'), message: z.string(), chatPhone: z.string(), orgId: z.string().uuid(), messageId: z.string(), customerId: z.string().uuid().nullable().optional() }),
-  z.object({ messageType: z.literal('list_reply'), message: z.string(), chatPhone: z.string(), orgId: z.string().uuid(), messageId: z.string(), customerId: z.string().uuid().nullable().optional() }),
+  BaseCustomerSchema.extend({ messageType: z.literal('customer_text') }),
+  BaseCustomerSchema.extend({ messageType: z.literal('button_reply') }),
+  BaseCustomerSchema.extend({ messageType: z.literal('list_reply') }),
+  z.object({
+    messageType: z.literal('owner_echo'),
+    message: z.string(),
+    chatPhone: z.string().min(5),
+    orgId: z.string().uuid(),
+    messageId: z.string().min(1),
+    isCommand: z.boolean().optional(),
+  }),
 ])
 
 export async function POST(request: NextRequest) {

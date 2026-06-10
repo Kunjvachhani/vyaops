@@ -79,7 +79,8 @@ BEGIN
 INSERT INTO organizations (
   id, name, gstin, address, city, state,
   phone, email, industry_config, tier, billing_status,
-  whatsapp_phone, whatsapp_connected, auto_mode_enabled,
+  whatsapp_phone, whatsapp_phone_number_id, whatsapp_display_number,
+  whatsapp_connected, auto_mode_enabled,
   language_preference, timezone, onboarded_at
 ) VALUES (
   v_org_id,
@@ -94,6 +95,8 @@ INSERT INTO organizations (
   'tier_2',
   'active',
   '+919876543210',
+  'TEST_PHONE_NUMBER_ID',    -- replace with real Meta Phone Number ID before going live
+  '919876543210',            -- normalized display number (no +)
   TRUE,
   FALSE,
   'gu',

@@ -25,9 +25,10 @@ import { adminClient } from '@/lib/supabase/admin'
 import { normalizePhone } from '@/lib/utils/phone'
 
 const ORG_PHONE_NUMBER_ID = process.env.META_WHATSAPP_PHONE_NUMBER_ID ?? 'TEST_PHONE_NUMBER_ID'
-const CUSTOMER_PHONE = '919876540001'
-const UNKNOWN_PHONE = '919999999999'
-const SECOND_CUSTOMER_PHONE = '919876540002'  // for /status scope test
+// These match seeded customers in supabase/seed.sql (normalizePhone handles the + prefix)
+const CUSTOMER_PHONE = '919824100001'         // Rajesh Patel
+const UNKNOWN_PHONE = '919999999999'          // not in seed — unknown sender
+const SECOND_CUSTOMER_PHONE = '919824100002'  // Dharmesh Shah — for /status scope test
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 const FLOW_URL = `${APP_URL}/api/whatsapp/flow`

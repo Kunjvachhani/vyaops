@@ -5,12 +5,13 @@ import { sendRawMessage } from '@/lib/whatsapp/meta-cloud-api'
 import { requireInternalAuth } from '@/lib/utils/internal-auth'
 import type { MessageType } from '@/types/whatsapp'
 
-// n8n hands us a fully-built Meta message body. We resolve the org from the
-// recipient phone (for outbound logging) and forward it to the Graph API.
+// n8n (or any internal caller) hands us a fully-built Meta message body.
+// orgId should be passed directly; it is used for outbound message logging only.
 const RequestSchema = z
   .object({
     to: z.string().min(5),
     type: z.enum(['text', 'interactive', 'template', 'image', 'document']),
+    orgId: z.string().uuid().optional(),   // preferred; used for log attribution
   })
   .passthrough()
 
@@ -33,20 +34,14 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const { to, ...message } = parsed.data
+  const { to, orgId: bodyOrgId, ...message } = parsed.data
+  // Fall back to a null-org sentinel only when orgId is genuinely unavailable.
+  const logOrgId = bodyOrgId ?? '00000000-0000-0000-0000-000000000000'
+
+  void adminClient // keep the import used (org lookup removed — 'to' is the customer, not the business)
 
   try {
-    const { data: org } = await adminClient
-      .from('organizations')
-      .select('id')
-      .eq('whatsapp_phone', to)
-      .is('deleted_at', null)
-      .single()
-
-    // Unknown recipient → still attempt the send, but we can't attribute the log.
-    const orgId = org?.id ?? '00000000-0000-0000-0000-000000000000'
-
-    const result = await sendRawMessage(to, message as { type: MessageType; [k: string]: unknown }, orgId)
+    const result = await sendRawMessage(to, message as { type: MessageType; [k: string]: unknown }, logOrgId)
 
     if (!result.success) {
       return NextResponse.json({ error: result.error, code: 'META_SEND_FAILED' }, { status: 502 })
