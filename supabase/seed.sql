@@ -89,12 +89,12 @@ INSERT INTO organizations (
   '42, GIDC Industrial Estate, Metoda',
   'Rajkot',
   'Gujarat',
-  '+919876543210',
+  '919876543210',
   'info@shreeambica.com',
   'foundry',
   'tier_2',
   'active',
-  '+919876543210',
+  '919876543210',
   'TEST_PHONE_NUMBER_ID',    -- replace with real Meta Phone Number ID before going live
   '919876543210',            -- normalized display number (no +)
   TRUE,
@@ -108,9 +108,9 @@ INSERT INTO organizations (
 -- USERS (3)
 -- ============================================================
 INSERT INTO users (id, organization_id, email, phone, full_name, role, is_active) VALUES
-  (v_owner_id,   v_org_id, 'jayesh@test.com', '+919876543211', 'Jayesh Patel',  'owner',   TRUE),
-  (v_manager_id, v_org_id, 'ramesh@test.com', '+919876543212', 'Ramesh Desai',  'manager', TRUE),
-  (v_worker_id,  v_org_id, 'kiran@test.com',  '+919876543213', 'Kiran Solanki', 'worker',  TRUE);
+  (v_owner_id,   v_org_id, 'jayesh@test.com', '919876543211', 'Jayesh Patel',  'owner',   TRUE),
+  (v_manager_id, v_org_id, 'ramesh@test.com', '919876543212', 'Ramesh Desai',  'manager', TRUE),
+  (v_worker_id,  v_org_id, 'kiran@test.com',  '919876543213', 'Kiran Solanki', 'worker',  TRUE);
 
 -- ============================================================
 -- CUSTOMERS (10) — aliases drive WhatsApp name fuzzy matching
@@ -119,16 +119,16 @@ INSERT INTO customers (
   id, organization_id, name, company_name, aliases,
   phone, email, gstin, address, payment_terms_days
 ) VALUES
-  (v_cust1_id,  v_org_id, 'Rajesh Patel',   'Patel Engineering Works',   ARRAY['rajesh','rajubhai','raju patel','patel saheb'],    '+919824100001', 'rajesh@patel-eng.com',      '24AABCP1234A1Z5', '12, Kalawad Road, Rajkot',          30),
-  (v_cust2_id,  v_org_id, 'Dharmesh Shah',  'Shah Industries Pvt Ltd',   ARRAY['dharmu','dharmesh','shah saheb','dharmbhai'],       '+919824100002', 'dharmu@shah-ind.com',       '24AABCS2345B1Z3', '45, Sardar Patel Nagar, Ahmedabad',  45),
-  (v_cust3_id,  v_org_id, 'Vijay Mehta',    'Mehta Metal Works',         ARRAY['vijay','vijaybhai','mehta','vijay mehta'],          '+919824100003', 'vijay@mehta-metals.com',    '24AABCM3456C1Z7', '8, Ceramic Zone, Morbi',             30),
-  (v_cust4_id,  v_org_id, 'Haresh Kumar',   'Kumar Pumps & Equipment',   ARRAY['haresh','harubhai','kumar saheb','hareshbhai'],     '+919824100004', 'haresh@kumarpumps.com',     '24AABCK4567D1Z1', '22, Bedi Port Road, Jamnagar',        60),
-  (v_cust5_id,  v_org_id, 'Suresh Solanki', 'Solanki Engineering',       ARRAY['suresh','sureshbhai','solanki','suresh solanki'],   '+919824100005', 'suresh@solanki-eng.com',    '24AABCS5678E1Z9', '3, Gondal Road, Rajkot',             30),
-  (v_cust6_id,  v_org_id, 'Jignesh Patel',  'JP Industries',             ARRAY['jigna','jignesh','jp','jignesh patel'],             '+919824100006', 'jignesh@jp-ind.com',        '24AABCJ6789F1Z8', '101, SG Highway, Ahmedabad',          45),
-  (v_cust7_id,  v_org_id, 'Manish Trivedi', 'Trivedi Valves & Fittings', ARRAY['manish','manishbhai','trivedi','manu'],             '+919824100007', 'manish@trivedi-valves.com', '24AABCT7890G1Z6', '15, 150 Ft Ring Road, Rajkot',        30),
-  (v_cust8_id,  v_org_id, 'Bhavesh Gohil',  'Gohil Castings Ltd',        ARRAY['bhavesh','bhaveshbhai','gohil','bhavu'],            '+919824100008', 'bhavesh@gohil-cast.com',    '24AABCG8901H1Z4', '5, Sanala Road, Morbi',               60),
-  (v_cust9_id,  v_org_id, 'Nilesh Chauhan', 'Chauhan Fittings',          ARRAY['nilesh','nileshbhai','chauhan','nilu'],             '+919824100009', 'nilesh@chauhan-fit.com',    '24AABCC9012I1Z2', '34, Digvijay Plot, Jamnagar',         30),
-  (v_cust10_id, v_org_id, 'Ketan Vora',     'Vora Machinery & Tools',    ARRAY['ketan','ketanbhai','vora','ketan vora'],            '+919824100010', 'ketan@vora-mach.com',       '24AABCV0123J1Z0', '7, Mavdi Road, Rajkot',              45);
+  (v_cust1_id,  v_org_id, 'Rajesh Patel',   'Patel Engineering Works',   ARRAY['rajesh','rajubhai','raju patel','patel saheb'],    '919824100001', 'rajesh@patel-eng.com',      '24AABCP1234A1Z5', '12, Kalawad Road, Rajkot',          30),
+  (v_cust2_id,  v_org_id, 'Dharmesh Shah',  'Shah Industries Pvt Ltd',   ARRAY['dharmu','dharmesh','shah saheb','dharmbhai'],       '919824100002', 'dharmu@shah-ind.com',       '24AABCS2345B1Z3', '45, Sardar Patel Nagar, Ahmedabad',  45),
+  (v_cust3_id,  v_org_id, 'Vijay Mehta',    'Mehta Metal Works',         ARRAY['vijay','vijaybhai','mehta','vijay mehta'],          '919824100003', 'vijay@mehta-metals.com',    '24AABCM3456C1Z7', '8, Ceramic Zone, Morbi',             30),
+  (v_cust4_id,  v_org_id, 'Haresh Kumar',   'Kumar Pumps & Equipment',   ARRAY['haresh','harubhai','kumar saheb','hareshbhai'],     '919824100004', 'haresh@kumarpumps.com',     '24AABCK4567D1Z1', '22, Bedi Port Road, Jamnagar',        60),
+  (v_cust5_id,  v_org_id, 'Suresh Solanki', 'Solanki Engineering',       ARRAY['suresh','sureshbhai','solanki','suresh solanki'],   '919824100005', 'suresh@solanki-eng.com',    '24AABCS5678E1Z9', '3, Gondal Road, Rajkot',             30),
+  (v_cust6_id,  v_org_id, 'Jignesh Patel',  'JP Industries',             ARRAY['jigna','jignesh','jp','jignesh patel'],             '919824100006', 'jignesh@jp-ind.com',        '24AABCJ6789F1Z8', '101, SG Highway, Ahmedabad',          45),
+  (v_cust7_id,  v_org_id, 'Manish Trivedi', 'Trivedi Valves & Fittings', ARRAY['manish','manishbhai','trivedi','manu'],             '919824100007', 'manish@trivedi-valves.com', '24AABCT7890G1Z6', '15, 150 Ft Ring Road, Rajkot',        30),
+  (v_cust8_id,  v_org_id, 'Bhavesh Gohil',  'Gohil Castings Ltd',        ARRAY['bhavesh','bhaveshbhai','gohil','bhavu'],            '919824100008', 'bhavesh@gohil-cast.com',    '24AABCG8901H1Z4', '5, Sanala Road, Morbi',               60),
+  (v_cust9_id,  v_org_id, 'Nilesh Chauhan', 'Chauhan Fittings',          ARRAY['nilesh','nileshbhai','chauhan','nilu'],             '919824100009', 'nilesh@chauhan-fit.com',    '24AABCC9012I1Z2', '34, Digvijay Plot, Jamnagar',         30),
+  (v_cust10_id, v_org_id, 'Ketan Vora',     'Vora Machinery & Tools',    ARRAY['ketan','ketanbhai','vora','ketan vora'],            '919824100010', 'ketan@vora-mach.com',       '24AABCV0123J1Z0', '7, Mavdi Road, Rajkot',              45);
 
 -- ============================================================
 -- VENDORS (5) — GSTIN: 24 (Gujarat) + PAN-derived pattern
@@ -140,7 +140,7 @@ INSERT INTO vendors (
   (v_vendor1_id, v_org_id,
    'Ambuja Steel Traders', NULL,
    ARRAY['ambuja','ambuja steel'],
-   '+919825200001', '24AABCA1234A1Z5',
+   '919825200001', '24AABCA1234A1Z5',
    'Plot 12, GIDC, Rajkot',
    ARRAY['CI Round Bar','MS Flat','MS Round Bar'],
    15, 4.2),
@@ -148,7 +148,7 @@ INSERT INTO vendors (
   (v_vendor2_id, v_org_id,
    'Jamnagar Metals Pvt Ltd', 'Jamnagar Metals Pvt Ltd',
    ARRAY['jamnagar metals','jm metals'],
-   '+919825200002', '24AACJM5678B1Z3',
+   '919825200002', '24AACJM5678B1Z3',
    '23, Bedi Port Rd, Jamnagar',
    ARRAY['Brass Rod','Copper Pipe','Aluminium Ingot'],
    30, 4.5),
@@ -156,7 +156,7 @@ INSERT INTO vendors (
   (v_vendor3_id, v_org_id,
    'Rajkot Iron Works', NULL,
    ARRAY['riw','rajkot iron'],
-   '+919825200003', '24AACRJ9012C1Z8',
+   '919825200003', '24AACRJ9012C1Z8',
    '5, Aji GIDC, Rajkot',
    ARRAY['Cast Iron Scrap','Pig Iron','Ferro Silicon'],
    15, 3.8),
@@ -164,7 +164,7 @@ INSERT INTO vendors (
   (v_vendor4_id, v_org_id,
    'Gujarat Sand & Minerals', 'Gujarat Sand & Minerals Ltd',
    ARRAY['gujarat sand','gsm'],
-   '+919825200004', '24AACGS3456D1Z2',
+   '919825200004', '24AACGS3456D1Z2',
    '89, Kathwada, Ahmedabad',
    ARRAY['Green Sand','Silica Sand','Bentonite'],
    30, 4.0),
@@ -172,7 +172,7 @@ INSERT INTO vendors (
   (v_vendor5_id, v_org_id,
    'Saurashtra Alloys', NULL,
    ARRAY['saurashtra alloys','sa metals'],
-   '+919825200005', '24AACSA7890E1Z7',
+   '919825200005', '24AACSA7890E1Z7',
    '17, Mavdi GIDC, Rajkot',
    ARRAY['Alloy Steel','Spring Steel','EN8 Rod'],
    30, 4.3);
