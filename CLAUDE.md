@@ -126,7 +126,7 @@ npm run test:benchmark         # AI eval benchmark suite
 2. NEVER hard delete any record. Soft delete via `deleted_at` only.
 3. EVERY mutation writes to `audit_log` via `src/lib/utils/audit.ts`.
 4. EVERY destructive action requires explicit user confirmation.
-5. EVERY webhook verifies Meta's X-Hub-Signature-256 using META_WHATSAPP_APP_SECRET before processing.
+5. EVERY webhook authenticates before processing. WhatsApp webhook: X-Hub-Signature-256 HMAC (DUALHOOK_SIGNING_SECRET / META_WHATSAPP_APP_SECRET) OR the secret URL token (WHATSAPP_WEBHOOK_URL_TOKEN, `?t=` query param) — required because Dualhook Coexistence deliveries are signed with Dualhook's tech-provider app secret, which is not exposed to us. Razorpay webhook: RAZORPAY_WEBHOOK_SECRET signature.
 6. EVERY API route checks org tier before allowing feature access.
 7. NEVER trust client-side tier checks alone. Re-verify server-side.
 8. NEVER log sensitive data (full phones, GSTINs, amounts) to Sentry.
@@ -170,7 +170,7 @@ npm run test:benchmark         # AI eval benchmark suite
 - **Rule A — Bot silence:** Bot NEVER sends a message to a customer chat except: (1) the order/modification/cancellation draft after owner affirmation, (2) the confirmation message after owner "ok", (3) the `/status` summary when the owner types `/status` in that chat. No greetings, no auto-replies, no "I didn't understand".
 - **Rule B — Draft + ok always required:** NO state-changing DB write (order create/modify/cancel) ever happens without the visible draft + explicit owner "ok" loop. This applies regardless of eval-gate score. `auto_process` decision means "post the draft without asking for clarification" — never "skip the owner's ok".
 - **Rule C — Echo loop prevention (critical):** The bot's own outbound messages come back as echoes. Before processing any echo, check whether its wamid matches a logged outbound message in `whatsapp_messages` — if yes, ignore it completely. Also ignore any echo whose text matches draft/confirmation message signatures as a second layer. Without this, the bot replies to itself forever.
-- Webhook payloads arrive directly from Meta via Dualhook's Webhook Override. Verify using META_WHATSAPP_APP_SECRET (X-Hub-Signature-256 header).
+- Webhook payloads arrive directly from Meta via Dualhook's Webhook Override. **Auth is two-layer:** (1) X-Hub-Signature-256 HMAC against DUALHOOK_SIGNING_SECRET then META_WHATSAPP_APP_SECRET; (2) fallback — secret URL token (`?t=` query param, WHATSAPP_WEBHOOK_URL_TOKEN) baked into the webhook URL registered in Dualhook. Layer 2 exists because Coexistence deliveries are signed by Dualhook's tech-provider Meta app, whose App Secret is not available to us. If Dualhook provides their signing secret, set DUALHOOK_SIGNING_SECRET and layer 1 takes over automatically.
 - Webhook acknowledged in <1 second. Processing is async (Next.js `after()`).
 - **Org lookup by `metadata.phone_number_id` → `organizations.whatsapp_phone_number_id`.** Never look up org by sender phone — sender is now always the customer.
 - **Orchestration lives in n8n (`n8n/workflows/master-message-handler.json`), proxied through Next.js.** The webhook verifies + forwards `{message, chatPhone, orgId, messageType, isCommand?}` to n8n; n8n routes (customer_text / owner_echo / log-only) and calls BACK into `/api/whatsapp/flow` — never Meta or DeepSeek directly. All outbound WhatsApp + AI flows through the audited app layer.
@@ -362,6 +362,8 @@ META_WHATSAPP_BUSINESS_ACCOUNT_ID=
 META_WHATSAPP_VERIFY_TOKEN=
 META_WHATSAPP_APP_SECRET=
 DUALHOOK_API_KEY=
+DUALHOOK_SIGNING_SECRET=         # optional: Dualhook tech-provider app secret (ask their support)
+WHATSAPP_WEBHOOK_URL_TOKEN=      # random token in the webhook URL (?t=...) — auth fallback under Coexistence
 
 # n8n orchestration + internal callbacks
 N8N_WEBHOOK_URL=                 # n8n master-handler production webhook
