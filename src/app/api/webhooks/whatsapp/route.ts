@@ -15,15 +15,53 @@ function maskPhone(phone: string): string {
   return phone.slice(0, 2) + 'XXXX' + phone.slice(-4)
 }
 
-function verifySignature(rawBody: string, signatureHeader: string | null): boolean {
-  const secret = process.env.META_WHATSAPP_APP_SECRET
-  if (!signatureHeader || !secret) return false
-  const expected = 'sha256=' + createHmac('sha256', secret).update(rawBody).digest('hex')
-  try {
-    return timingSafeEqual(Buffer.from(signatureHeader), Buffer.from(expected))
-  } catch {
-    return false
+function timingSafeEqualStr(a: string, b: string): boolean {
+  const bufA = Buffer.from(a)
+  const bufB = Buffer.from(b)
+  if (bufA.length !== bufB.length) return false
+  return timingSafeEqual(bufA, bufB)
+}
+
+/**
+ * Layer 1 — HMAC-SHA256 signature (X-Hub-Signature-256).
+ *
+ * In Dualhook Coexistence + Webhook Override, Meta signs deliveries with the
+ * App Secret of the app subscribed to the WABA — Dualhook's tech-provider app,
+ * whose secret is not exposed to us. We still verify against:
+ *   - DUALHOOK_SIGNING_SECRET (if Dualhook support provides it)
+ *   - META_WHATSAPP_APP_SECRET (correct when our own app is the subscriber,
+ *     e.g. direct Cloud API setups without Dualhook)
+ */
+function verifyHmacSignature(rawBody: string, signatureHeader: string | null): boolean {
+  if (!signatureHeader) return false
+
+  const secrets = [
+    process.env.DUALHOOK_SIGNING_SECRET,
+    process.env.META_WHATSAPP_APP_SECRET,
+  ].filter((s): s is string => Boolean(s))
+
+  for (const secret of secrets) {
+    const expected = 'sha256=' + createHmac('sha256', secret).update(rawBody).digest('hex')
+    if (timingSafeEqualStr(expected, signatureHeader)) return true
   }
+  return false
+}
+
+/**
+ * Layer 2 — secret URL token fallback.
+ *
+ * The webhook URL registered with Dualhook/Meta carries a random token as a
+ * query param (?t=...). Meta POSTs to the exact override_callback_uri, so the
+ * token is known only to Meta, Dualhook, and us — it authenticates deliveries
+ * when the HMAC secret is unavailable (Dualhook signs with its own app secret).
+ * Only active when WHATSAPP_WEBHOOK_URL_TOKEN is set.
+ */
+function verifyUrlToken(request: NextRequest): boolean {
+  const expected = process.env.WHATSAPP_WEBHOOK_URL_TOKEN
+  if (!expected) return false
+  const provided = new URL(request.url).searchParams.get('t')
+  if (!provided) return false
+  return timingSafeEqualStr(provided, expected)
 }
 
 function isEchoField(field: string): boolean {
@@ -324,9 +362,20 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   const isDualhookPing = request.headers.get('x-dualhook-event') === 'test_ping'
 
-  if (!isDualhookPing && !verifySignature(rawBody, request.headers.get('x-hub-signature-256'))) {
-    console.error('[whatsapp] HMAC-SHA256 signature verification failed — rejecting webhook')
-    return new Response('Unauthorized', { status: 401 })
+  if (!isDualhookPing) {
+    const hmacOk = verifyHmacSignature(rawBody, request.headers.get('x-hub-signature-256'))
+    const tokenOk = !hmacOk && verifyUrlToken(request)
+
+    if (!hmacOk && !tokenOk) {
+      console.error('[whatsapp] webhook authentication failed (HMAC + URL token) — rejecting')
+      return new Response('Unauthorized', { status: 401 })
+    }
+
+    if (tokenOk) {
+      // HMAC can't be verified under Dualhook Coexistence (signed by Dualhook's
+      // tech-provider app secret). URL-token auth is the documented fallback.
+      console.log('[whatsapp] authenticated via URL token (HMAC unavailable)')
+    }
   }
 
   if (isDualhookPing) {
