@@ -6,7 +6,7 @@
  *   handleOwnerEcho()       — called for owner outbound echoes and slash commands
  *
  * All DB writes use the admin client (service-role). All customer-visible text
- * must eventually be i18n'd; today English is the placeholder for all locales.
+ * is localised via getBotStrings() using the org's language_preference (gu/hi/en).
  */
 
 import { adminClient } from '@/lib/supabase/admin'
@@ -21,6 +21,8 @@ import {
   buildCancellationDraft,
   buildStatusSummary,
 } from '@/lib/whatsapp/interactive'
+import { getBotStrings } from '@/lib/whatsapp/bot-strings'
+import type { Locale } from '@/lib/whatsapp/bot-strings'
 import { formatISTDate, toIST } from '@/lib/utils/date'
 import type { Database } from '@/types/database'
 
@@ -85,6 +87,15 @@ async function expireOldAndInsertNew(
   }
 
   return data as unknown as PendingOrderRow
+}
+
+async function getOrgLocale(orgId: string): Promise<Locale> {
+  const { data } = await adminClient
+    .from('organizations')
+    .select('language_preference')
+    .eq('id', orgId)
+    .maybeSingle()
+  return ((data?.language_preference ?? 'en') as Locale)
 }
 
 // ─── Customer message handler ─────────────────────────────────────────────────
@@ -270,7 +281,8 @@ async function handleEchoForDetected(
   }
 
   // AFFIRM — build and send the draft
-  const draftText = await buildDraftForPending(pending, orgId)
+  const locale = await getOrgLocale(orgId)
+  const draftText = await buildDraftForPending(pending, orgId, locale)
   if (!draftText) {
     console.error('[flow-engine] could not build draft for pending:', pending.id)
     return
@@ -289,7 +301,7 @@ async function handleEchoForDetected(
   console.log('[flow-engine] draft posted, pending_order state→draft_posted:', pending.id)
 }
 
-async function buildDraftForPending(pending: PendingOrderRow, orgId: string): Promise<string | null> {
+async function buildDraftForPending(pending: PendingOrderRow, orgId: string, locale: Locale): Promise<string | null> {
   const extraction = pending.extraction as Record<string, unknown>
   const quantity = extraction.quantity as number | null
   const entities = extraction.entities as Array<Record<string, unknown>> | undefined
@@ -313,7 +325,7 @@ async function buildDraftForPending(pending: PendingOrderRow, orgId: string): Pr
       quantity: quantity ?? 0,
       productName,
       customerName,
-    })
+    }, locale)
   }
 
   if (pending.intent === 'CANCEL_ORDER' && pending.target_order_id) {
@@ -348,7 +360,7 @@ async function buildDraftForPending(pending: PendingOrderRow, orgId: string): Pr
       customerName,
       unit: product?.unit,
       quantityProduced: produced,
-    })
+    }, locale)
   }
 
   if (pending.intent === 'MODIFY_ORDER' && pending.target_order_id) {
@@ -376,7 +388,7 @@ async function buildDraftForPending(pending: PendingOrderRow, orgId: string): Pr
       productName: product?.name ?? productName,
       customerName,
       unit: product?.unit,
-    })
+    }, locale)
   }
 
   return null
@@ -406,12 +418,13 @@ async function handleEchoForDraftPosted(
   }
 
   // Owner confirmed — execute the action
+  const locale = await getOrgLocale(orgId)
   if (pending.intent === 'NEW_ORDER') {
-    await executeNewOrder(orgId, chatPhone, pending, parsed.promisedDate)
+    await executeNewOrder(orgId, chatPhone, pending, parsed.promisedDate, locale)
   } else if (pending.intent === 'CANCEL_ORDER') {
-    await executeCancelOrder(orgId, chatPhone, pending)
+    await executeCancelOrder(orgId, chatPhone, pending, locale)
   } else if (pending.intent === 'MODIFY_ORDER') {
-    await executeModifyOrder(orgId, chatPhone, pending, ownerReply, parsed.promisedDate)
+    await executeModifyOrder(orgId, chatPhone, pending, ownerReply, parsed.promisedDate, locale)
   }
 }
 
@@ -419,7 +432,8 @@ async function executeNewOrder(
   orgId: string,
   chatPhone: string,
   pending: PendingOrderRow,
-  promisedDate: string | null
+  promisedDate: string | null,
+  locale: Locale
 ): Promise<void> {
   const extraction = pending.extraction as Record<string, unknown>
   const entities = extraction.entities as Array<Record<string, unknown>> | undefined
@@ -475,9 +489,10 @@ async function executeNewOrder(
     .eq('id', pending.id)
 
   // Build and send confirmation (Rule A — this is one of the three allowed sends)
-  const readyLine = promisedDate ? `\nReady by: ${formatISTDate(new Date(promisedDate))}` : ''
+  const s = getBotStrings(locale).confirm
+  const readyLine = promisedDate ? s.readyBy(formatISTDate(new Date(promisedDate))) : ''
   const confirmText = [
-    `✅ Order Confirmed — ${orderResult.orderNumber}`,
+    s.newOrder(orderResult.orderNumber),
     `${orderResult.quantity} × ${orderResult.productName} (${orderResult.unit})`,
     readyLine,
   ].filter(Boolean).join('\n')
@@ -490,7 +505,8 @@ async function executeNewOrder(
 async function executeCancelOrder(
   orgId: string,
   chatPhone: string,
-  pending: PendingOrderRow
+  pending: PendingOrderRow,
+  locale: Locale
 ): Promise<void> {
   if (!pending.target_order_id) {
     console.error('[flow-engine] executeCancelOrder: no target_order_id', pending.id)
@@ -528,7 +544,7 @@ async function executeCancelOrder(
     .update({ state: 'confirmed', confirmed_order_id: pending.target_order_id })
     .eq('id', pending.id)
 
-  const confirmText = `✅ Order Confirmed — ${order.order_number} cancelled.`
+  const confirmText = getBotStrings(locale).confirm.cancelOrder(order.order_number)
   await sendTextMessage(chatPhone, confirmText, orgId)
 
   console.log('[flow-engine] CANCEL_ORDER confirmed:', order.order_number)
@@ -539,7 +555,8 @@ async function executeModifyOrder(
   chatPhone: string,
   pending: PendingOrderRow,
   ownerReply: string,
-  _promisedDate: string | null
+  _promisedDate: string | null,
+  locale: Locale
 ): Promise<void> {
   if (!pending.target_order_id) {
     console.error('[flow-engine] executeModifyOrder: no target_order_id', pending.id)
@@ -592,7 +609,7 @@ async function executeModifyOrder(
           productName: product?.name ?? 'Product',
           customerName: '',
           unit: product?.unit,
-        })
+        }, locale)
         await sendTextMessage(chatPhone, disambiguationText, orgId)
         return
       }
@@ -636,7 +653,8 @@ async function executeModifyOrder(
     .update({ state: 'confirmed', confirmed_order_id: pending.target_order_id })
     .eq('id', pending.id)
 
-  const confirmText = `✅ Order Updated — ${order.order_number}\nNew quantity: ${resolvedQuantity}`
+  const sc = getBotStrings(locale).confirm
+  const confirmText = `${sc.modifyOrder(order.order_number)}\n${sc.newQuantity(resolvedQuantity)}`
   await sendTextMessage(chatPhone, confirmText, orgId)
 
   console.log('[flow-engine] MODIFY_ORDER confirmed:', order.order_number, resolvedMode, resolvedQuantity)
@@ -715,10 +733,12 @@ async function handleStatusCommand(orgId: string, chatPhone: string): Promise<vo
     .order('created_at', { ascending: false })
     .limit(10)
 
+  const locale = await getOrgLocale(orgId)
   if (!orders?.length) {
+    const ss = getBotStrings(locale).status
     await sendTextMessage(
       chatPhone,
-      `📦 Your Orders — ${customer.name}\n\nNo open orders.`,
+      `${ss.header} — ${customer.name}\n\n${ss.noOrders}`,
       orgId
     )
     return
@@ -764,7 +784,7 @@ async function handleStatusCommand(orgId: string, chatPhone: string): Promise<vo
           : null,
       }
     }),
-  })
+  }, locale)
 
   await sendTextMessage(chatPhone, summary, orgId)
 }
@@ -795,7 +815,8 @@ async function handleOwnerOrderTrigger(
   const pending = await getActivePending(orgId, chatPhone)
   if (!pending || pending.state !== 'detected') return
 
-  const draftText = await buildDraftForPending(pending, orgId)
+  const locale = await getOrgLocale(orgId)
+  const draftText = await buildDraftForPending(pending, orgId, locale)
   if (!draftText) return
 
   const sendResult = await sendTextMessage(chatPhone, draftText, orgId)

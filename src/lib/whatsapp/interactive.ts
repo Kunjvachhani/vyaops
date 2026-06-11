@@ -2,6 +2,8 @@ import { adminClient } from '@/lib/supabase/admin'
 import { paiseToCurrency } from '@/lib/utils/currency'
 import { hasAccess } from '@/config/features'
 import { ALL_MENU_ITEMS } from '@/config/whatsapp-menus'
+import { getBotStrings } from '@/lib/whatsapp/bot-strings'
+import type { Locale } from '@/lib/whatsapp/bot-strings'
 import type { Tier } from '@/lib/constants'
 import type { Button, InteractiveMessage, ClarificationOption } from '@/types/whatsapp'
 
@@ -262,17 +264,18 @@ export interface OrderDraftData {
   urgent?: boolean
 }
 
-export function buildOrderDraft(data: OrderDraftData): string {
+export function buildOrderDraft(data: OrderDraftData, locale: Locale = 'en'): string {
+  const s = getBotStrings(locale).orderDraft
   const unit = data.unit ?? 'pcs'
-  const urgentTag = data.urgent ? ' | Urgent' : ''
+  const urgentTag = data.urgent ? s.urgentSuffix : ''
   return [
-    '📋 Order Draft',
+    s.title,
     '',
     `${data.quantity} × ${data.productName} (${unit})${urgentTag}`,
-    `Customer: ${data.customerName}`,
-    'Ready by: — (reply "ok <date>" to set)',
+    `${s.customerLabel}: ${data.customerName}`,
+    s.readyByLine,
     '',
-    'Reply "ok" to confirm · /cancel to discard',
+    s.instructions,
   ].join('\n')
 }
 
@@ -285,33 +288,34 @@ export interface ModificationDraftData {
   unit?: string
 }
 
-export function buildModificationDraft(data: ModificationDraftData): string {
+export function buildModificationDraft(data: ModificationDraftData, locale: Locale = 'en'): string {
+  const s = getBotStrings(locale).modDraft
   const unit = data.unit ?? 'pcs'
 
   if (data.mode === 'ambiguous') {
     const totalIfAdd = data.originalQuantity + data.newQuantity
     return [
-      '📋 Modification Draft',
+      s.title,
       '',
-      `Customer: ${data.customerName}`,
-      `Product: ${data.productName}`,
+      `${s.customerLabel}: ${data.customerName}`,
+      `${s.productLabel}: ${data.productName}`,
       '',
-      `Total ${totalIfAdd} ke total ${data.newQuantity}?`,
-      `Reply "ok ${totalIfAdd}" (add) · "ok ${data.newQuantity}" (replace) · /cancel`,
+      s.ambiguousQuestion(totalIfAdd, data.newQuantity),
+      s.ambiguousInstructions(totalIfAdd, data.newQuantity),
     ].join('\n')
   }
 
   const finalQty =
     data.mode === 'add' ? data.originalQuantity + data.newQuantity : data.newQuantity
-  const label = data.mode === 'add' ? `+${data.newQuantity} added` : 'quantity updated'
+  const label = data.mode === 'add' ? s.addedLabel(data.newQuantity) : s.updatedLabel
 
   return [
-    '📋 Modification Draft',
+    s.title,
     '',
     `${finalQty} × ${data.productName} (${unit}) — ${label}`,
-    `Customer: ${data.customerName}`,
+    `${s.customerLabel}: ${data.customerName}`,
     '',
-    'Reply "ok" to confirm · /cancel to discard',
+    s.instructions,
   ].join('\n')
 }
 
@@ -324,21 +328,22 @@ export interface CancellationDraftData {
   quantityProduced?: number
 }
 
-export function buildCancellationDraft(data: CancellationDraftData): string {
+export function buildCancellationDraft(data: CancellationDraftData, locale: Locale = 'en'): string {
+  const s = getBotStrings(locale).cancelDraft
   const unit = data.unit ?? 'pcs'
   const lines = [
-    '📋 Cancellation Draft',
+    s.title,
     '',
-    `Order: ${data.orderNumber}`,
+    `${s.orderLabel}: ${data.orderNumber}`,
     `${data.quantity} × ${data.productName} (${unit})`,
-    `Customer: ${data.customerName}`,
+    `${s.customerLabel}: ${data.customerName}`,
   ]
 
   if (data.quantityProduced && data.quantityProduced > 0) {
-    lines.push(``, `⚠️ ${data.quantityProduced} pcs already produced`)
+    lines.push('', s.producedWarning(data.quantityProduced))
   }
 
-  lines.push('', 'Reply "ok" to cancel order · /cancel to keep order')
+  lines.push('', s.instructions)
   return lines.join('\n')
 }
 
@@ -358,16 +363,18 @@ export interface StatusSummaryData {
   orders: StatusOrderItem[]
 }
 
-export function buildStatusSummary(data: StatusSummaryData): string {
+export function buildStatusSummary(data: StatusSummaryData, locale: Locale = 'en'): string {
+  const s = getBotStrings(locale).status
+
   if (data.orders.length === 0) {
-    return `📦 Your Orders — ${data.customerName}\n\nNo open orders.`
+    return `${s.header} — ${data.customerName}\n\n${s.noOrders}`
   }
 
-  const lines = [`📦 Your Orders — ${data.customerName}`, '']
+  const lines = [`${s.header} — ${data.customerName}`, '']
 
   for (const o of data.orders) {
-    const progress = o.quantityProduced > 0 ? ` — ${o.quantityProduced} done` : ''
-    const readyBy = o.deliveryDate ? ` ✅ Ready: ${o.deliveryDate}` : ''
+    const progress = o.quantityProduced > 0 ? s.doneSuffix(o.quantityProduced) : ''
+    const readyBy = o.deliveryDate ? ` ${s.readyLabel}: ${o.deliveryDate}` : ''
     lines.push(`${o.orderNumber}: ${o.quantity} × ${o.productName}${progress}${readyBy}`)
   }
 
