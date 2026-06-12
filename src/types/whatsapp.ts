@@ -176,6 +176,9 @@ export interface MetaWebhookPayload {
         metadata: { display_phone_number: string; phone_number_id: string }
         contacts?: WhatsAppContact[]
         messages?: WhatsAppInboundMessage[]
+        // Echo deliveries (field 'smb_message_echoes') carry the echoed
+        // messages in 'message_echoes', NOT in 'messages'.
+        message_echoes?: WhatsAppEchoMessage[]
         statuses?: WhatsAppStatusUpdate[]
       }
       // field is 'messages' for customer inbound,
