@@ -321,7 +321,15 @@ async function _processWebhookPayload(payload: MetaWebhookPayload): Promise<void
           await processCustomerMessage(msg, org.id)
         }
       } else if (isEchoField(change.field)) {
-        if (!value.messages?.length) continue
+        // Meta delivers echoes in value.message_echoes (not value.messages).
+        // Keep value.messages as a defensive fallback.
+        const echoes =
+          value.message_echoes ??
+          (value.messages as unknown as WhatsAppEchoMessage[] | undefined)
+        if (!echoes?.length) {
+          console.log('[whatsapp] echo change with no echo entries — ignoring')
+          continue
+        }
 
         const org = await lookupOrg(phone_number_id, display_phone_number)
         if (!org) {
@@ -329,10 +337,8 @@ async function _processWebhookPayload(payload: MetaWebhookPayload): Promise<void
           continue
         }
 
-        for (const raw of value.messages) {
-          // Echo messages have a 'to' field — cast through unknown since the
-          // WhatsAppInboundMessage union doesn't include it.
-          await processEcho(raw as unknown as WhatsAppEchoMessage, org.id)
+        for (const raw of echoes) {
+          await processEcho(raw, org.id)
         }
       }
       // All other change.field values (statuses in separate change, etc.): silently ignore
