@@ -1,3 +1,4 @@
+import { after } from 'next/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireInternalAuth } from '@/lib/utils/internal-auth'
@@ -50,9 +51,10 @@ export async function POST(request: NextRequest) {
 
   const data = parsed.data
 
-  // Acknowledge immediately — processing is async (fire-and-forget from route handler)
-  // n8n waits on this response; we must return before the 30s node timeout.
-  void (async () => {
+  // Acknowledge immediately — processing continues via after(), which keeps the
+  // serverless function alive past the response. A naked fire-and-forget promise
+  // gets killed when Vercel freezes the function after responding.
+  after(async () => {
     try {
       if (data.messageType === 'owner_echo') {
         await handleOwnerEcho(data.orgId, data.chatPhone, data.message, data.messageId)
@@ -74,7 +76,7 @@ export async function POST(request: NextRequest) {
         error: err instanceof Error ? err.message : String(err),
       })
     }
-  })()
+  })
 
   return NextResponse.json({ ok: true })
 }
