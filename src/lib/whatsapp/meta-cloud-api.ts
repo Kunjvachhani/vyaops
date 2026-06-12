@@ -116,6 +116,13 @@ async function sendAndLog(
     return { success: true, messageId }
   } catch (err: unknown) {
     const error = err instanceof Error ? err.message : 'Unknown error'
+    // Never swallow send failures silently — this is the only place the
+    // Graph API error surfaces.
+    console.error('[meta-api] send failed:', {
+      org_id: organizationId,
+      message_type: messageType,
+      error,
+    })
     return { success: false, error }
   }
 }

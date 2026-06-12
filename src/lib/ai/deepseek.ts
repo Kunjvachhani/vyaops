@@ -75,6 +75,20 @@ IMPORTANT RULES:
 1. A reply with a condition (e.g., "yes but 3 days") is AFFIRM
 2. A reply expressing doubt or asking for time is UNRELATED — not a clear signal
 3. "/cancel" typed by the owner is NOT classified here — handled separately
+4. Owners write in Gujarati/Hindi romanized as Latin script ("Gujlish"/"Hinglish").
+   Read the reply in that context — do NOT match on isolated word fragments.
+
+LANGUAGE EXAMPLES (Gujlish/Hinglish — all AFFIRM):
+- "ok karavi dav" / "kari dav" / "kari dejo" → AFFIRM (get it done)
+- "thai jase" / "thai jashe" → AFFIRM (it will be done)
+- "vandho nathi" / "vandho thai jase" → AFFIRM ("no objection" / "no problem, will be done" — "vandho" alone does NOT mean decline)
+- "ha, moklo" / "haa thik che" / "barabar" → AFFIRM
+- "kar do" / "ho jayega" / "bana denge" → AFFIRM
+
+DECLINE examples:
+- "na, nahi thase" / "nahi banega" → DECLINE
+- "stock nathi, na karo" / "cancel karo" → DECLINE
+- "shaky nathi" / "possible nathi" → DECLINE
 
 RESPONSE FORMAT (strict JSON, no markdown):
 {"signal": "AFFIRM", "confidence": 0.95}`

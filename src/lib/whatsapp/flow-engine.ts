@@ -290,6 +290,16 @@ async function handleEchoForDetected(
 
   const sendResult = await sendTextMessage(chatPhone, draftText, orgId)
 
+  if (!sendResult.success) {
+    // Draft never reached the customer — keep state 'detected' so the owner's
+    // next affirmation retries the draft. Never advance state on a failed send.
+    console.error('[flow-engine] draft send FAILED — pending_order stays detected:', {
+      pending_id: pending.id,
+      error: sendResult.error,
+    })
+    return
+  }
+
   await adminClient
     .from('pending_orders')
     .update({
