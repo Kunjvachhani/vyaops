@@ -61,6 +61,8 @@ async function callGraphApi(
     const errData = (await res.json()) as MetaErrorResponse
     const { code, error_subcode, message } = errData.error
     lastError = `Meta API error ${code}${error_subcode ? `/${error_subcode}` : ''}: ${message}`
+    // Short dedicated log so error code is never truncated in Vercel
+    console.error(`[meta-api] code=${code} subcode=${error_subcode ?? 'none'} http=${res.status}`)
 
     // Non-retriable: permanent 4xx client errors (but retry 429 rate limits)
     if (res.status >= 400 && res.status < 500 && res.status !== 429) {
