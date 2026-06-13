@@ -118,10 +118,11 @@ async function sendAndLog(
     const error = err instanceof Error ? err.message : 'Unknown error'
     // Never swallow send failures silently — this is the only place the
     // Graph API error surfaces.
-    console.error('[meta-api] send failed:', {
+    console.error(`[meta-api] send failed: ${error}`, {
       org_id: organizationId,
       message_type: messageType,
-      error,
+      phone_number_id: process.env.META_WHATSAPP_PHONE_NUMBER_ID ?? 'UNSET',
+      token_prefix: (process.env.META_WHATSAPP_ACCESS_TOKEN ?? '').slice(0, 10) || 'UNSET',
     })
     return { success: false, error }
   }
