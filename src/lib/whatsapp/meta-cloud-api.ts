@@ -37,6 +37,9 @@ async function callGraphApi(
   const accessToken = process.env.META_WHATSAPP_ACCESS_TOKEN ?? ''
   const url = `${GRAPH_API_BASE}/${phoneNumberId}/messages`
 
+  // Always log token prefix so we can verify which token Vercel is using
+  console.log(`[meta-api] attempt pid=${phoneNumberId} tok=${accessToken.slice(0, 15) || 'UNSET'}`)
+
   let lastError = 'Unknown error'
 
   for (let attempt = 0; attempt <= RETRY_LIMIT; attempt++) {
