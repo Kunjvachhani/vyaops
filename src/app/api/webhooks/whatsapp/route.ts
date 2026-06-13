@@ -309,7 +309,13 @@ async function _processWebhookPayload(payload: MetaWebhookPayload): Promise<void
           await processStatusUpdates(value.statuses)
         }
 
-        if (!value.messages?.length) continue
+        const hasEchoes = (value.message_echoes?.length ?? 0) > 0
+        const hasMessages = (value.messages?.length ?? 0) > 0
+
+        // Meta sometimes delivers owner echoes inside a 'messages' change event
+        // (value.message_echoes populated, value.messages empty). The old
+        // `if (!value.messages?.length) continue` silently dropped them.
+        if (!hasEchoes && !hasMessages) continue
 
         const org = await lookupOrg(phone_number_id, display_phone_number)
         if (!org) {
@@ -317,8 +323,16 @@ async function _processWebhookPayload(payload: MetaWebhookPayload): Promise<void
           continue
         }
 
-        for (const msg of value.messages) {
-          await processCustomerMessage(msg, org.id)
+        if (hasEchoes) {
+          for (const echo of value.message_echoes!) {
+            await processEcho(echo, org.id)
+          }
+        }
+
+        if (hasMessages) {
+          for (const msg of value.messages!) {
+            await processCustomerMessage(msg, org.id)
+          }
         }
       } else if (isEchoField(change.field)) {
         // Meta delivers echoes in value.message_echoes (not value.messages).
