@@ -30,15 +30,59 @@ interface MetaSuccessResponse {
   messages: Array<{ id: string }>
 }
 
+// Resolve the business phone-number ID to SEND FROM. Multi-tenant correct: each
+// org sends from its own WhatsApp number (organizations.whatsapp_phone_number_id).
+// Falls back to the global env var for internal sends that have no real org id.
+// This is also why the missing Vercel env var no longer breaks production: the
+// value is sourced from the DB first.
+async function resolveSendingPhoneNumberId(organizationId: string): Promise<string> {
+  const envFallback = (process.env.META_WHATSAPP_PHONE_NUMBER_ID ?? '').trim()
+
+  if (!organizationId || organizationId === '00000000-0000-0000-0000-000000000000') {
+    return envFallback
+  }
+
+  try {
+    const { data } = await adminClient
+      .from('organizations')
+      .select('whatsapp_phone_number_id')
+      .eq('id', organizationId)
+      .is('deleted_at', null)
+      .maybeSingle()
+    const orgPid = (data?.whatsapp_phone_number_id ?? '').trim()
+    return orgPid || envFallback
+  } catch {
+    return envFallback
+  }
+}
+
 async function callGraphApi(
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  phoneNumberId: string
 ): Promise<{ messageId: string }> {
-  const phoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID ?? ''
-  const accessToken = process.env.META_WHATSAPP_ACCESS_TOKEN ?? ''
-  const url = `${GRAPH_API_BASE}/${phoneNumberId}/messages`
+  // .trim() guards against trailing newlines/spaces that creep in when long
+  // values are pasted into the Vercel env UI.
+  const cleanPhoneNumberId = phoneNumberId.trim()
+  const accessToken = (process.env.META_WHATSAPP_ACCESS_TOKEN ?? '').trim()
+
+  // Fail LOUD on missing config. An empty phoneNumberId silently builds the URL
+  // `${BASE}//messages`, which Meta resolves to the node 'messages' and rejects
+  // with the misleading "Error 100/33: Object with ID 'messages' does not exist".
+  // That single missing env var cost days of debugging — never again.
+  if (!cleanPhoneNumberId) {
+    throw new Error(
+      'No WhatsApp phone_number_id available — neither organizations.whatsapp_phone_number_id ' +
+        'nor META_WHATSAPP_PHONE_NUMBER_ID is set. Cannot call Meta Graph API.'
+    )
+  }
+  if (!accessToken) {
+    throw new Error('META_WHATSAPP_ACCESS_TOKEN is not set — cannot call Meta Graph API.')
+  }
+
+  const url = `${GRAPH_API_BASE}/${cleanPhoneNumberId}/messages`
 
   // Always log token prefix so we can verify which token Vercel is using
-  console.log(`[meta-api] attempt pid=${phoneNumberId} tok=${accessToken.slice(0, 15) || 'UNSET'}`)
+  console.log(`[meta-api] attempt pid=${cleanPhoneNumberId} tok=${accessToken.slice(0, 15) || 'UNSET'}`)
 
   let lastError = 'Unknown error'
 
@@ -64,8 +108,11 @@ async function callGraphApi(
     const errData = (await res.json()) as MetaErrorResponse
     const { code, error_subcode, message } = errData.error
     lastError = `Meta API error ${code}${error_subcode ? `/${error_subcode}` : ''}: ${message}`
-    // Short dedicated log so error code is never truncated in Vercel
-    console.error(`[meta-api] code=${code} subcode=${error_subcode ?? 'none'} http=${res.status}`)
+    // One field per line — Vercel MCP table truncates columns ~35 chars
+    console.error(`[meta-sub] ${error_subcode ?? 'none'}`)
+    console.error(`[meta-code] ${code}`)
+    console.error(`[meta-http] ${res.status}`)
+    console.error(`[meta-msg] ${message.slice(0, 80)}`)
 
     // Non-retriable: permanent 4xx client errors (but retry 429 rate limits)
     if (res.status >= 400 && res.status < 500 && res.status !== 429) {
@@ -116,7 +163,8 @@ async function sendAndLog(
   logBody?: string
 ): Promise<SendResult> {
   try {
-    const { messageId } = await callGraphApi(apiBody)
+    const phoneNumberId = await resolveSendingPhoneNumberId(organizationId)
+    const { messageId } = await callGraphApi(apiBody, phoneNumberId)
     logOutboundMessage(organizationId, phone, messageType, messageId, logBody)
     return { success: true, messageId }
   } catch (err: unknown) {
@@ -126,7 +174,7 @@ async function sendAndLog(
     console.error(`[meta-api] send failed: ${error}`, {
       org_id: organizationId,
       message_type: messageType,
-      phone_number_id: process.env.META_WHATSAPP_PHONE_NUMBER_ID ?? 'UNSET',
+      env_pid: (process.env.META_WHATSAPP_PHONE_NUMBER_ID ?? '').trim() || 'UNSET',
       token_prefix: (process.env.META_WHATSAPP_ACCESS_TOKEN ?? '').slice(0, 10) || 'UNSET',
     })
     return { success: false, error }
