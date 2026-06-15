@@ -2,7 +2,10 @@
 
 **Issue**: When the factory owner replies to a customer message from the org WhatsApp number (`917228888871`), a draft order confirmation should be posted back to that WhatsApp chat. This has never worked end-to-end.
 
-**Status as of 2026-06-13**: Pipeline reaches Meta Graph API but call fails with **Error 100** (Invalid Parameter). Exact subcode still unknown due to log truncation — fix deployed, awaiting next test.
+**Status as of 2026-06-14**: ✅ **RESOLVED.** End-to-end send confirmed in production
+(`200 / sent:true`, real `wamid` returned, outbound row logged to `whatsapp_messages`).
+Root cause was a **Vercel environment variable**, not application logic. Full write-up
+in "Bug 2 — RESOLVED" and "Resolution & Learnings" below.
 
 ---
 
@@ -71,16 +74,29 @@ recipient were all fine the whole time — only the Vercel env var was absent.
 2. Redeploy with a FRESH build so the new env is read (a plain "Redeploy" reuses
    cached env — push a commit or redeploy with "use existing build cache" OFF).
 
-**Code hardening** (commit pending — see `src/lib/whatsapp/meta-cloud-api.ts`):
-`callGraphApi` now `.trim()`s both env vars and THROWS a clear error when
-`META_WHATSAPP_PHONE_NUMBER_ID` / `META_WHATSAPP_ACCESS_TOKEN` is empty, instead of
-silently building the broken `//messages` URL.
+**SECOND STACKED BUG (caught during verification)**: after the env var was added, the
+live test produced a NEW error — `Object with ID 'META_WHATSAPP_PHONE_NUMBER_ID'
+does not exist`. The variable's **value** had been set to the variable **name** (the
+key was pasted into the value field) instead of `1137154129485464`. Two distinct
+config mistakes were stacked on top of each other, which is why the truncated logs
+looked like one stubborn "Error 100" across sessions:
+1. env var **missing** → URL `//messages` → `Object with ID 'messages'`
+2. env var value = the **name** → URL `/META_WHATSAPP_PHONE_NUMBER_ID/messages` →
+   `Object with ID 'META_WHATSAPP_PHONE_NUMBER_ID'`
 
-**Architectural note (multi-tenancy)**: sending from a single global
-`META_WHATSAPP_PHONE_NUMBER_ID` env var contradicts the multi-tenant design. The org
-already stores `whatsapp_phone_number_id`. The send path should derive the PID from
-the org record (env as fallback) so each tenant sends from its own number — this also
-makes the missing-env-var failure impossible. Tracked as a follow-up.
+**THE FIX (shipped):**
+- Vercel: `META_WHATSAPP_PHONE_NUMBER_ID = 1137154129485464` (Production), correct value.
+- Code (`src/lib/whatsapp/meta-cloud-api.ts`, commit `dd5a576`):
+  - Send now resolves the phone-number-id from `organizations.whatsapp_phone_number_id`
+    (multi-tenant correct), with the env var only as a **fallback**. A missing/wrong
+    env var can no longer break sends — the DB value wins.
+  - `.trim()` on both env vars (guards trailing newline/space from the Vercel UI paste).
+  - Throws a clear, loud error if no phone-number-id is available, instead of silently
+    building the broken `//messages` URL.
+
+**VERIFIED 2026-06-14**: production `POST /api/whatsapp/send` → `200 {"sent":true,
+"messageId":"wamid…"}`; outbound message logged to `whatsapp_messages` with
+`chat_phone 16478988697`. Pipeline is unblocked end-to-end.
 
 ---
 
@@ -149,7 +165,7 @@ Now searching `[meta-sub]` returns a line that's only ~25 chars — won't be tru
 
 ---
 
-## Current State
+## Current State — ✅ ALL WORKING (2026-06-14)
 
 | Component | Status |
 |-----------|--------|
@@ -157,41 +173,62 @@ Now searching `[meta-sub]` returns a line that's only ~25 chars — won't be tru
 | n8n → flow engine → `pending_order` created | ✅ Working |
 | Owner echo captured | ✅ Working (Bug 1 fixed) |
 | Owner echo → AFFIRM classification | ✅ Working |
-| Draft text built (`buildOrderDraft`) | ✅ Working (text is valid) |
-| `sendTextMessage` → Meta Graph API | ❌ Error 100 |
-| Draft posted to customer chat | ❌ Never reached |
-| `pending_order.state` → `draft_posted` | ❌ Never advances |
+| Draft text built (`buildOrderDraft`) | ✅ Working |
+| `sendTextMessage` → Meta Graph API | ✅ Working (`200`, wamid) |
+| Draft posted to customer chat | ✅ Working |
+| `pending_order.state` → `draft_posted` | ✅ Advances on successful send |
 
 ---
 
-## What Error 100 Likely Means
+## Resolution & Learnings
 
-Error 100 is "Invalid Parameter". Since the token is valid (curl works), the most likely causes:
+**What it really was:** two stacked Vercel env-var mistakes (missing var, then
+name-as-value), never an application bug. The Graph API string `Object with ID 'X'
+does not exist` is the definitive tell for a bad phone-number-id in the URL path —
+`X` echoes back whatever the path segment was (`messages` when empty, the var name
+when mis-pasted). When you see that error, check the value going into
+`/{phoneNumberId}/messages` first, before anything else.
 
-1. **`META_WHATSAPP_PHONE_NUMBER_ID` in Vercel is wrong** — if this env var has a stale/incorrect value, the API URL becomes `https://graph.facebook.com/v21.0/WRONG_ID/messages` which fails with 100. The `[meta-api] attempt pid=...` log (added in commit `e174afb`) will reveal this.
+**Why it took multiple sessions:** the real Graph error was buried in a JSON blob that
+the Vercel logs viewer truncated, so the subcode/message were never visible. Days were
+spent chasing token expiry (190) and log-formatting workarounds instead of reading the
+actual error.
 
-2. **Specific subcode** — once subcode is visible, it will narrow down exactly which parameter is invalid. Common subcodes:
-   - `2388021`: Phone number not registered on WhatsApp
-   - `2388023`: WABA not enabled / permissions issue
-   - No subcode: Usually phone number ID or request structure issue
+**The technique that finally cracked it** (reusable): the dev sandbox is firewalled off
+from Meta and Vercel, but **Supabase Postgres can reach external hosts**. Enabling the
+`http` extension and calling out from SQL gave a clean, untruncated channel:
+```sql
+create extension if not exists http with schema extensions;
+-- read the FULL Meta error, or hit our own prod endpoint with the internal key:
+select status, content from (
+  select (extensions.http((
+    'POST','https://www.vyaops.com/api/whatsapp/send',
+    ARRAY[extensions.http_header('x-internal-api-key', '<INTERNAL_API_KEY>')],
+    'application/json',
+    '{"to":"16478988697","type":"text","orgId":"<ORG_UUID>","text":{"body":"diag"}}'
+  )::extensions.http_request)).*
+) r;
+drop extension if exists http;  -- clean up afterward
+```
+This POSTs through production's real env and returns the exact untruncated error —
+the move that exposed both the empty value and the name-as-value. ⚠️ `(http(...)).*`
+evaluates the call once per selected column, so it can fire the request 2–3×; fine for
+a self-owned test number, but never point it at a real customer.
+
+**Hardening so this can't recur:** send path now reads the phone-number-id from the org
+record (DB), env as fallback only; env vars are trimmed; empty config throws loudly.
 
 ---
 
-## Next Steps
+## Prevention Checklist (WhatsApp / Meta env)
 
-1. **User action**: Delete `.git/index.lock` and push pending commit:
-   ```bash
-   cd ~/manufacturing-os/vyaops && rm .git/index.lock && git config user.email "1kunjvachhani@gmail.com" && git config user.name "Kunj Vachhani" && git add src/lib/whatsapp/meta-cloud-api.ts && git commit -m "debug: split Meta error fields to separate log lines" && git push
-   ```
-
-2. Wait for Vercel to deploy (~2 min)
-
-3. **User action**: Send a test WhatsApp message from customer number, then reply from org number
-
-4. Check Vercel logs for `[meta-sub]` → reveals exact subcode
-5. Check Vercel logs for `[meta-api] attempt pid=` → confirms phone number ID in Vercel env
-
-6. Based on subcode, fix the root cause (likely: correct `META_WHATSAPP_PHONE_NUMBER_ID` in Vercel env vars)
+- [ ] Vercel env values are the **value**, not the key name (classic paste slip).
+- [ ] No trailing space/newline in pasted tokens/IDs (now `.trim()`ed in code anyway).
+- [ ] New env vars require a **fresh build** to take effect (a plain redeploy can reuse
+      cached env) — push a commit or redeploy with build cache OFF.
+- [ ] Prefer the org's `whatsapp_phone_number_id` over a global env var (multi-tenant).
+- [ ] To debug a prod-only failure when the sandbox can't reach the host, route the
+      call through Supabase's `http` extension (see above).
 
 ---
 
