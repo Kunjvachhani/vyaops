@@ -154,14 +154,117 @@
         "orderNumber": "ऑर्डर #",
         "date": "तारीख",
         "status": "स्थिति",
-        "by": "द्वारा"
+        "by": "द्वारा",
+        "viewInvoice": "चालान देखें"
       }
     },
     "invoices": {
       "title": "चालान",
       "description": "अपने सभी ग्राहकों के लिए GST-अनुपालक चालान बनाएं, भेजें और ट्रैक करें।",
-      "sprint": "Sprint 3 में बन रहा है",
-      "placeholder": "Sprint 3 पूरा होने के बाद चालान प्रबंधन यहाँ उपलब्ध होगा।"
+      "newInvoice": "चालान बनाएं",
+      "searchPlaceholder": "चालान # खोजें...",
+      "exportCsv": "CSV निर्यात करें",
+      "allStatuses": "सभी",
+      "noInvoices": "कोई चालान नहीं मिला।",
+      "columns": {
+        "invoiceNumber": "चालान #",
+        "customer": "ग्राहक",
+        "amount": "राशि",
+        "status": "स्थिति",
+        "dueDate": "नियत तिथि",
+        "actions": "कार्रवाई"
+      },
+      "status": {
+        "draft": "ड्राफ्ट",
+        "sent": "भेजा गया",
+        "paid": "भुगतान हुआ",
+        "partially_paid": "आंशिक भुगतान",
+        "overdue": "अतिदेय",
+        "cancelled": "रद्द"
+      },
+      "summary": {
+        "outstanding": "कुल बकाया",
+        "overdue": "अतिदेय",
+        "paidThisMonth": "इस माह प्राप्त",
+        "unpaidInvoices": "{count} बकाया"
+      },
+      "createDialog": {
+        "title": "चालान बनाएं",
+        "step": "चरण {step} / 2",
+        "step1Title": "ऑर्डर चुनें",
+        "step2Title": "समीक्षा और समायोजन",
+        "searchOrder": "पूर्ण ऑर्डर खोजें...",
+        "noOrders": "चालान की प्रतीक्षा में कोई पूर्ण ऑर्डर नहीं।",
+        "order": "ऑर्डर",
+        "customer": "ग्राहक",
+        "product": "उत्पाद",
+        "taxRate": "GST दर (%)",
+        "dueDate": "नियत तिथि",
+        "subtotal": "उप-योग",
+        "tax": "GST",
+        "total": "कुल",
+        "notes": "टिप्पणी",
+        "notesPlaceholder": "भुगतान शर्तें, टिप्पणी...",
+        "previewPdf": "PDF पूर्वावलोकन",
+        "generating": "बन रहा है...",
+        "creating": "बन रहा है...",
+        "create": "चालान बनाएं"
+      },
+      "detail": {
+        "invoiceInfo": "चालान जानकारी",
+        "lineItems": "आइटम",
+        "customer": "ग्राहक",
+        "order": "ऑर्डर",
+        "date": "तिथि",
+        "dueDate": "नियत तिथि",
+        "status": "स्थिति",
+        "product": "उत्पाद",
+        "qty": "मात्रा",
+        "unitPrice": "इकाई मूल्य",
+        "subtotal": "उप-योग",
+        "tax": "GST",
+        "total": "कुल",
+        "paid": "भुगतान हुआ",
+        "balance": "शेष राशि",
+        "notes": "टिप्पणी",
+        "downloadPdf": "PDF डाउनलोड",
+        "sendWhatsapp": "WhatsApp पर भेजें",
+        "recordPayment": "भुगतान दर्ज करें",
+        "markSent": "भेजा गया चिह्नित करें",
+        "cancelInvoice": "चालान रद्द करें",
+        "paymentHistory": "भुगतान इतिहास",
+        "noPayments": "अभी तक कोई भुगतान दर्ज नहीं।",
+        "auditTrail": "ऑडिट ट्रेल",
+        "noAudit": "अभी तक कोई ऑडिट प्रविष्टि नहीं।",
+        "by": "द्वारा",
+        "downloading": "डाउनलोड हो रहा है...",
+        "sending": "भेजा जा रहा है...",
+        "sentViaWhatsapp": "WhatsApp पर भेजा गया",
+        "method": "तरीका",
+        "reference": "संदर्भ"
+      },
+      "paymentDialog": {
+        "title": "भुगतान दर्ज करें",
+        "outstanding": "बकाया",
+        "amount": "राशि (₹)",
+        "date": "भुगतान तिथि",
+        "method": "भुगतान तरीका",
+        "reference": "संदर्भ संख्या",
+        "referencePlaceholder": "UTR / चेक नं...",
+        "notes": "टिप्पणी",
+        "recording": "दर्ज हो रहा है...",
+        "record": "भुगतान दर्ज करें",
+        "methods": {
+          "upi": "UPI",
+          "bank_transfer": "बैंक ट्रांसफर",
+          "cash": "नकद",
+          "cheque": "चेक"
+        }
+      },
+      "messages": {
+        "sendSuccess": "चालान WhatsApp पर भेजा गया।",
+        "paymentRecorded": "भुगतान दर्ज किया गया।"
+      }
     },
     "customers": {
       "title": "ग्राहक",

@@ -17,6 +17,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { CreateInvoiceDialog } from '@/app/(dashboard)/invoices/_components/create-invoice-dialog'
+import { InvoiceDetailDialog } from '@/app/(dashboard)/invoices/_components/invoice-detail-dialog'
 import { paiseToCurrency } from '@/lib/utils/currency'
 import { formatISTDate, formatIST } from '@/lib/utils/date'
 import type { Json } from '@/types/database'
@@ -99,13 +101,20 @@ export function OrderDetailDialog({ orderId, onOpenChange, onUpdated }: OrderDet
   const [updating, setUpdating] = useState(false)
   const [actionError, setActionError] = useState('')
 
+  // Invoice linkage: id of an existing (non-cancelled) invoice for this order, if any.
+  const [existingInvoiceId, setExistingInvoiceId] = useState<string | null>(null)
+  const [createInvoiceOpen, setCreateInvoiceOpen] = useState(false)
+  const [viewInvoiceId, setViewInvoiceId] = useState<string | null>(null)
+
   const fetchOrder = useCallback(async (id: string) => {
     setLoading(true)
     setActionError('')
     try {
-      const [orderRes, auditRes] = await Promise.all([
+      const [orderRes, auditRes, invoiceRes] = await Promise.all([
         fetch(`/api/orders/${id}`),
         fetch(`/api/orders/${id}/audit`),
+        // Lightweight check: does this order already have a (non-cancelled) invoice?
+        fetch(`/api/invoices?order_id=${id}&limit=1`),
       ])
       if (orderRes.ok) {
         const json = await orderRes.json()
@@ -114,6 +123,13 @@ export function OrderDetailDialog({ orderId, onOpenChange, onUpdated }: OrderDet
       if (auditRes.ok) {
         const json = await auditRes.json()
         setAudit((json.data as AuditEntry[]) ?? [])
+      }
+      if (invoiceRes.ok) {
+        const json = await invoiceRes.json()
+        const live = ((json.data as { id: string; status: string }[]) ?? []).find(
+          (inv) => inv.status !== 'cancelled'
+        )
+        setExistingInvoiceId(live?.id ?? null)
       }
     } finally {
       setLoading(false)
@@ -127,6 +143,7 @@ export function OrderDetailDialog({ orderId, onOpenChange, onUpdated }: OrderDet
       setOrder(null)
       setAudit([])
       setActionError('')
+      setExistingInvoiceId(null)
     }
   }, [orderId, fetchOrder])
 
@@ -166,6 +183,7 @@ export function OrderDetailDialog({ orderId, onOpenChange, onUpdated }: OrderDet
   const open = orderId !== null
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(v) => !v && onOpenChange(false)}>
       <DialogContent className="sm:max-w-[680px]">
         <DialogHeader>
@@ -331,9 +349,23 @@ export function OrderDetailDialog({ orderId, onOpenChange, onUpdated }: OrderDet
               )}
               {order.status === 'completed' && (
                 <>
-                  <Button size="sm" variant="outline" disabled>
-                    {t('detail.generateInvoice')}
-                  </Button>
+                  {existingInvoiceId ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setViewInvoiceId(existingInvoiceId)}
+                    >
+                      {t('detail.viewInvoice')}
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setCreateInvoiceOpen(true)}
+                    >
+                      {t('detail.generateInvoice')}
+                    </Button>
+                  )}
                   <Button size="sm" onClick={() => updateStatus('dispatched')} disabled={updating}>
                     {updating ? t('detail.updating') : t('detail.markDispatched')}
                   </Button>
@@ -384,5 +416,27 @@ export function OrderDetailDialog({ orderId, onOpenChange, onUpdated }: OrderDet
         )}
       </DialogContent>
     </Dialog>
+
+      {/* Generate an invoice for this order (pre-selected, skips the order picker). */}
+      <CreateInvoiceDialog
+        open={createInvoiceOpen}
+        onOpenChange={setCreateInvoiceOpen}
+        presetOrderId={order?.id ?? null}
+        onSuccess={() => {
+          if (order) fetchOrder(order.id)
+          onUpdated()
+        }}
+      />
+
+      {/* View the existing invoice for this order. */}
+      <InvoiceDetailDialog
+        invoiceId={viewInvoiceId}
+        onOpenChange={(o) => !o && setViewInvoiceId(null)}
+        onUpdated={() => {
+          if (order) fetchOrder(order.id)
+          onUpdated()
+        }}
+      />
+    </>
   )
 }

@@ -154,14 +154,117 @@
         "orderNumber": "ઓર્ડર #",
         "date": "તારીખ",
         "status": "સ્થિતિ",
-        "by": "દ્વારા"
+        "by": "દ્વારા",
+        "viewInvoice": "ઇન્વૉઇસ જુઓ"
       }
     },
     "invoices": {
       "title": "ઇન્વૉઇસ",
       "description": "તમારા તમામ ગ્રાહકો માટે GST-અનુપાલક ઇન્વૉઇસ બનાવો, મોકલો અને ટ્રૅક કરો.",
-      "sprint": "Sprint 3 માં નિર્માણ થઈ રહ્યું છે",
-      "placeholder": "Sprint 3 પૂર્ણ થયા પછી ઇન્વૉઇસ સંચાલન અહીં ઉપલબ્ધ થશે."
+      "newInvoice": "ઇન્વૉઇસ બનાવો",
+      "searchPlaceholder": "ઇન્વૉઇસ # શોધો...",
+      "exportCsv": "CSV નિકાસ કરો",
+      "allStatuses": "બધા",
+      "noInvoices": "કોઈ ઇન્વૉઇસ મળ્યું નથી.",
+      "columns": {
+        "invoiceNumber": "ઇન્વૉઇસ #",
+        "customer": "ગ્રાહક",
+        "amount": "રકમ",
+        "status": "સ્થિતિ",
+        "dueDate": "નિયત તારીખ",
+        "actions": "ક્રિયાઓ"
+      },
+      "status": {
+        "draft": "ડ્રાફ્ટ",
+        "sent": "મોકલેલ",
+        "paid": "ચૂકવેલ",
+        "partially_paid": "આંશિક ચૂકવેલ",
+        "overdue": "મુદત વીતી",
+        "cancelled": "રદ કરેલ"
+      },
+      "summary": {
+        "outstanding": "કુલ બાકી",
+        "overdue": "મુદત વીતી",
+        "paidThisMonth": "આ મહિને ચૂકવેલ",
+        "unpaidInvoices": "{count} બાકી"
+      },
+      "createDialog": {
+        "title": "ઇન્વૉઇસ બનાવો",
+        "step": "પગલું {step} / 2",
+        "step1Title": "ઑર્ડર પસંદ કરો",
+        "step2Title": "સમીક્ષા અને ગોઠવણ",
+        "searchOrder": "પૂર્ણ થયેલ ઑર્ડર શોધો...",
+        "noOrders": "ઇન્વૉઇસની રાહ જોતો કોઈ પૂર્ણ ઑર્ડર નથી.",
+        "order": "ઑર્ડર",
+        "customer": "ગ્રાહક",
+        "product": "ઉત્પાદન",
+        "taxRate": "GST દર (%)",
+        "dueDate": "નિયત તારીખ",
+        "subtotal": "પેટા-કુલ",
+        "tax": "GST",
+        "total": "કુલ",
+        "notes": "નોંધ",
+        "notesPlaceholder": "ચૂકવણીની શરતો, ટિપ્પણી...",
+        "previewPdf": "PDF પૂર્વાવલોકન",
+        "generating": "બની રહ્યું છે...",
+        "creating": "બની રહ્યું છે...",
+        "create": "ઇન્વૉઇસ બનાવો"
+      },
+      "detail": {
+        "invoiceInfo": "ઇન્વૉઇસ માહિતી",
+        "lineItems": "આઇટમ્સ",
+        "customer": "ગ્રાહક",
+        "order": "ઑર્ડર",
+        "date": "તારીખ",
+        "dueDate": "નિયત તારીખ",
+        "status": "સ્થિતિ",
+        "product": "ઉત્પાદન",
+        "qty": "જથ્થો",
+        "unitPrice": "એકમ ભાવ",
+        "subtotal": "પેટા-કુલ",
+        "tax": "GST",
+        "total": "કુલ",
+        "paid": "ચૂકવેલ",
+        "balance": "બાકી રકમ",
+        "notes": "નોંધ",
+        "downloadPdf": "PDF ડાઉનલોડ",
+        "sendWhatsapp": "WhatsApp પર મોકલો",
+        "recordPayment": "ચૂકવણી નોંધો",
+        "markSent": "મોકલેલ તરીકે ચિહ્નિત કરો",
+        "cancelInvoice": "ઇન્વૉઇસ રદ કરો",
+        "paymentHistory": "ચૂકવણી ઇતિહાસ",
+        "noPayments": "હજુ કોઈ ચૂકવણી નોંધાઈ નથી.",
+        "auditTrail": "ઑડિટ ટ્રેલ",
+        "noAudit": "હજુ કોઈ ઑડિટ એન્ટ્રી નથી.",
+        "by": "દ્વારા",
+        "downloading": "ડાઉનલોડ થઈ રહ્યું છે...",
+        "sending": "મોકલાઈ રહ્યું છે...",
+        "sentViaWhatsapp": "WhatsApp પર મોકલેલ",
+        "method": "રીત",
+        "reference": "સંદર્ભ"
+      },
+      "paymentDialog": {
+        "title": "ચૂકવણી નોંધો",
+        "outstanding": "બાકી",
+        "amount": "રકમ (₹)",
+        "date": "ચૂકવણી તારીખ",
+        "method": "ચૂકવણી રીત",
+        "reference": "સંદર્ભ નંબર",
+        "referencePlaceholder": "UTR / ચેક નં...",
+        "notes": "નોંધ",
+        "recording": "નોંધાઈ રહ્યું છે...",
+        "record": "ચૂકવણી નોંધો",
+        "methods": {
+          "upi": "UPI",
+          "bank_transfer": "બેંક ટ્રાન્સફર",
+          "cash": "રોકડ",
+          "cheque": "ચેક"
+        }
+      },
+      "messages": {
+        "sendSuccess": "ઇન્વૉઇસ WhatsApp પર મોકલાયું.",
+        "paymentRecorded": "ચૂકવણી નોંધાઈ."
+      }
     },
     "customers": {
       "title": "ગ્રાહકો",
