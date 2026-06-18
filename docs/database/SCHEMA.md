@@ -47,6 +47,8 @@ whatsapp_display_number     TEXT                     -- Fallback: human-readable
 whatsapp_connected          BOOLEAN DEFAULT FALSE
 auto_mode_enabled           BOOLEAN DEFAULT FALSE    -- AI auto-reply toggle (deprecated in new model — kept for future use)
 language_preference TEXT NOT NULL DEFAULT 'gu'        -- gu | hi | en
+whatsapp_proactive_enabled  BOOLEAN NOT NULL DEFAULT TRUE  -- receives scheduled notifications (summary, reminders, compliance)
+whatsapp_proactive_set_at   TIMESTAMPTZ                    -- when the preference was last explicitly changed
 timezone            TEXT NOT NULL DEFAULT 'Asia/Kolkata'
 onboarded_at        TIMESTAMPTZ
 created_at          TIMESTAMPTZ NOT NULL DEFAULT now()

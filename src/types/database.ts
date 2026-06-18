@@ -691,6 +691,8 @@ export type Database = {
           whatsapp_phone: string | null
           whatsapp_phone_number_id: string | null
           whatsapp_display_number: string | null
+          whatsapp_proactive_enabled: boolean
+          whatsapp_proactive_set_at: string | null
         }
         Insert: {
           address?: string | null
@@ -718,6 +720,8 @@ export type Database = {
           whatsapp_phone?: string | null
           whatsapp_phone_number_id?: string | null
           whatsapp_display_number?: string | null
+          whatsapp_proactive_enabled?: boolean
+          whatsapp_proactive_set_at?: string | null
         }
         Update: {
           address?: string | null
@@ -745,6 +749,8 @@ export type Database = {
           whatsapp_phone?: string | null
           whatsapp_phone_number_id?: string | null
           whatsapp_display_number?: string | null
+          whatsapp_proactive_enabled?: boolean
+          whatsapp_proactive_set_at?: string | null
         }
         Relationships: []
       }

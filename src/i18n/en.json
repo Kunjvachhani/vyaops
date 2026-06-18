@@ -354,7 +354,18 @@
       "title": "Settings",
       "description": "Manage your organisation profile, billing, team members, and integrations.",
       "sprint": "Building in Sprint 7",
-      "placeholder": "Settings will be available here once Sprint 7 is complete."
+      "placeholder": "Settings will be available here once Sprint 7 is complete.",
+      "tabs": {
+        "preferences": "Preferences"
+      },
+      "preferences": {
+        "whatsappTitle": "WhatsApp Notifications",
+        "notificationsLabel": "Daily order summaries, payment reminders, and compliance alerts via WhatsApp",
+        "notificationsHelp": "You'll receive these at your registered WhatsApp number. Turn off to stop all proactive messages.",
+        "lastChanged": "Last changed: {when} IST",
+        "usingDefault": "Using default",
+        "updateError": "Couldn't save your preference. Please try again."
+      }
     }
   },
   "featureGate": {
