@@ -225,3 +225,93 @@ export const QwenEvalResponseSchema = z.object({
 })
 
 export type QwenEvalResponse = z.infer<typeof QwenEvalResponseSchema>
+
+// ─── Dialect Dictionary types ────────────────────────────────────────────────
+
+export interface DialectLookupParams {
+  message: string
+  orgId: string
+  industrySegment: string
+}
+
+export interface ResolvedToken {
+  token: string
+  canonical: string
+  tier: 1 | 2 | 3 | 4 | 5
+  category: string
+  confidence: number
+}
+
+export interface PreStructuredHints {
+  quantity?: number
+  customer_hint?: string
+  product_hint?: string
+  intent_hint?: IntentType
+}
+
+export interface DialectLookupResult {
+  resolved_tokens: ResolvedToken[]
+  pre_structured: PreStructuredHints
+  unresolved_tokens: string[]
+  raw_message: string
+  lookup_time_ms: number
+}
+
+// ─── Dialect Learning types ──────────────────────────────────────────────────
+
+export interface CorrectionParams {
+  rawMessage: string
+  aiExtraction: DeepSeekClassifyResponse
+  ownerCorrection: Record<string, unknown>
+  orgId: string
+  industrySegment: string
+  orgDictionarySummary: string
+}
+
+export interface NewDialectMapping {
+  term: string
+  canonical: string
+  category: string
+  likely_scope: 'org' | 'industry' | 'global'
+}
+
+export interface CorrectionAnalysis {
+  is_dialect_issue: boolean
+  new_mappings: NewDialectMapping[]
+  reasoning: string
+}
+
+export const CorrectionAnalysisSchema = z.object({
+  is_dialect_issue: z.boolean(),
+  new_mappings: z.array(z.object({
+    term: z.string(),
+    canonical: z.string(),
+    category: z.string(),
+    likely_scope: z.enum(['org', 'industry', 'global']),
+  })),
+  reasoning: z.string(),
+})
+
+export interface OnboardingDictParams {
+  orgId: string
+  industrySegment: string
+  products: Array<{ id: string; name: string }>
+  customers: Array<{ id: string; name: string }>
+  languagePreference: string
+}
+
+export interface OnboardingDictResult {
+  products: Array<{ name: string; aliases: string[] }>
+  customers: Array<{ name: string; aliases: string[] }>
+}
+
+export const OnboardingDictResultSchema = z.object({
+  products: z.array(z.object({
+    name: z.string(),
+    aliases: z.array(z.string()),
+  })),
+  customers: z.array(z.object({
+    name: z.string(),
+    aliases: z.array(z.string()),
+  })),
+})
