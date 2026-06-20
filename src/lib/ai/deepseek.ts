@@ -57,7 +57,16 @@ RESPONSE FORMAT (strict JSON, no markdown):
 }
 
 For MODIFY_ORDER: populate order_ref_raw with any quantity/product reference to the existing order.
-For CANCEL_ORDER: populate order_ref_raw with whatever the customer uses to identify the order.`
+For CANCEL_ORDER: populate order_ref_raw with whatever the customer uses to identify the order.
+
+CRITICAL INTENT DISAMBIGUATION — NEW_ORDER vs GENERAL_QUERY:
+- If the message mentions a PRODUCT + QUANTITY (even implicitly), it's NEW_ORDER. "Vijay bhai ne 500 piece valve body joiye" → NEW_ORDER
+- If the message ONLY asks about price/rate/availability WITHOUT placing an order, it's GENERAL_QUERY. "valve body no bhav shu che?" → GENERAL_QUERY
+- If the message asks "maal che?" / "stock che?" (is product available?), it's INVENTORY_CHECK, NOT NEW_ORDER.
+- "X joiye" / "X chahiye" / "X moklo" WITH quantity → NEW_ORDER. WITHOUT quantity but with a clear product → still NEW_ORDER (quantity=null).
+- "X no rate apo" / "X no bhav batao" → GENERAL_QUERY (price inquiry, not ordering).
+- "batch kitna hua" / "aaj kitna banya" / "production update" → PRODUCTION_UPDATE, NOT GENERAL_QUERY.
+- Greetings alone ("kem cho", "hello", "good morning") with no business content → GENERAL_QUERY.`
 
 const OWNER_REPLY_CLASSIFIER_PROMPT = `You are classifying a factory owner's WhatsApp reply to determine his intent regarding a pending customer order.
 
@@ -232,7 +241,7 @@ async function classifyAndExtract(message: string, orgContext: OrgContext) {
       { role: 'user', content: userContent },
     ],
     temperature: 0.1,
-    maxTokens: 512,
+    maxTokens: 800,
   })
 
   const raw = JSON.parse(response.content) as unknown

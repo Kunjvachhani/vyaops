@@ -159,14 +159,27 @@ export const ModificationParseResultSchema = z.object({
 
 const LANGUAGE_VALUES = ['gujarati', 'hindi', 'hinglish', 'english'] as const
 
+/**
+ * Coerce helper: accepts number OR numeric string, returns number | null.
+ * DeepSeek sometimes returns quantity/price as a string ("500" instead of 500).
+ * Without this, the Zod parse throws and discards the entire extraction.
+ */
+const coerceNumeric = z.union([
+  z.number(),
+  z.string().transform((s) => {
+    const n = Number(s)
+    return isNaN(n) ? null : n
+  }),
+]).nullable().optional()
+
 export const DeepSeekRawEntitiesSchema = z.object({
   customer_name_raw: z.string().nullable().optional(),
   vendor_name_raw: z.string().nullable().optional(),
   product_raw: z.string().nullable().optional(),
-  quantity: z.number().nullable().optional(),
+  quantity: coerceNumeric,
   unit: z.string().nullable().optional(),
   delivery_date_raw: z.string().nullable().optional(),
-  price_raw: z.number().nullable().optional(),
+  price_raw: coerceNumeric,
   defect_type: z.string().nullable().optional(),
   order_ref_raw: z.string().nullable().optional(),
 })
