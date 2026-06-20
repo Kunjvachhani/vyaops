@@ -19,7 +19,7 @@
  * formula mirrors `scoreAgainst` in src/lib/utils/fuzzy-match.ts exactly.
  */
 
-import { readFileSync, writeFileSync, appendFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, appendFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { routeAI, applyDialectHints } from '@/lib/ai/model-router'
@@ -500,20 +500,56 @@ function dimensionStats(results: CaseResult[], dim: Criterion): { passed: number
 
 // ─── Main ───────────────────────────────────────────────────────────────────────
 
-function parseArgs(): { limit: number | null; concurrency: number } {
+function parseArgs(): { limit: number | null; concurrency: number; resume: string | null } {
   let limit: number | null = null
   let concurrency = Number(process.env.BENCHMARK_CONCURRENCY ?? 6)
+  let resume: string | null = null
   for (const arg of process.argv.slice(2)) {
     const limitMatch = arg.match(/^--limit=(\d+)$/)
     const concMatch = arg.match(/^--concurrency=(\d+)$/)
+    const resumeMatch = arg.match(/^--resume(?:=(.+))?$/)
     if (limitMatch) limit = Number(limitMatch[1])
     if (concMatch) concurrency = Number(concMatch[1])
+    if (resumeMatch) resume = resumeMatch[1] ?? 'auto'
   }
-  return { limit, concurrency: Math.max(1, concurrency) }
+  return { limit, concurrency: Math.max(1, concurrency), resume }
+}
+
+// Load already-scored cases from a prior run's JSONL so --resume can skip them.
+// Only successfully-scored cases are reused; errored cases (e.g. the OpenRouter
+// 402 batch) are dropped so they get retried. Returns id → CaseResult.
+function loadResumeResults(resumeArg: string, currentStream: string): Map<string, CaseResult> {
+  let path = resumeArg
+  if (resumeArg === 'auto') {
+    const dir = join(process.cwd(), 'tests/ai')
+    const candidates = readdirSync(dir)
+      .filter((f) => f.startsWith('benchmark-results-') && f.endsWith('.jsonl'))
+      .map((f) => join(dir, f))
+      .filter((p) => p !== currentStream)
+      .sort()
+    if (candidates.length === 0) {
+      console.error('✖ --resume=auto found no prior benchmark-results-*.jsonl to resume from')
+      process.exit(1)
+    }
+    path = candidates[candidates.length - 1]
+  }
+
+  const done = new Map<string, CaseResult>()
+  const lines = readFileSync(path, 'utf-8').split('\n').filter(Boolean)
+  for (const line of lines) {
+    try {
+      const r = JSON.parse(line) as CaseResult
+      if (!r.error) done.set(r.id, r) // reuse only clean results; retry errored ones
+    } catch {
+      // skip malformed line
+    }
+  }
+  console.log(`Resuming from ${path} — ${done.size} previously-scored cases will be skipped`)
+  return done
 }
 
 async function main(): Promise<void> {
-  const { limit, concurrency } = parseArgs()
+  const { limit, concurrency, resume } = parseArgs()
 
   if (!process.env.DEEPSEEK_API_KEY || !process.env.OPENROUTER_API_KEY) {
     console.error('✖ DEEPSEEK_API_KEY and OPENROUTER_API_KEY must be set (run via npm run test:benchmark).')
@@ -524,18 +560,22 @@ async function main(): Promise<void> {
   const file = JSON.parse(readFileSync(benchmarkPath, 'utf-8')) as BenchmarkFile
   const catalogs = file._meta.industry_catalogs
   const allCases = file.test_cases
-  const cases = limit != null ? allCases.slice(0, limit) : allCases
+  const scopedCases = limit != null ? allCases.slice(0, limit) : allCases
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
   const streamPath = join(process.cwd(), `tests/ai/benchmark-results-${timestamp}.jsonl`)
 
-  console.log(`Running ${cases.length} benchmark case(s) — concurrency ${concurrency}`)
+  // --resume: reuse clean results from a prior run; only run the rest.
+  const resumed = resume ? loadResumeResults(resume, streamPath) : new Map<string, CaseResult>()
+  const cases = scopedCases.filter((c) => !resumed.has(c.id))
+
+  console.log(`Running ${cases.length} benchmark case(s) — concurrency ${concurrency}${resumed.size ? ` (+${resumed.size} reused)` : ''}`)
   console.log('(classify via model router + eval gate scoring; this calls live AI APIs)')
   console.log(`Live per-case log (tail this for supervision) → ${streamPath}\n`)
 
   const startedAt = Date.now()
   let passedSoFar = 0
-  const results = await runWithConcurrency(cases, catalogs, concurrency, (result, done, total) => {
+  const freshResults = await runWithConcurrency(cases, catalogs, concurrency, (result, done, total) => {
     if (result.passed) passedSoFar++
     // Stream every completed case to disk as JSONL — enables live mid-run analysis
     // and survives a crash. The final aggregated JSON is still written at the end.
@@ -550,6 +590,12 @@ async function main(): Promise<void> {
   })
   process.stdout.write('\n')
   const wallMs = Date.now() - startedAt
+
+  // Merge freshly-run results with reused ones, in scoped-case order.
+  const freshById = new Map(freshResults.map((r) => [r.id, r]))
+  const results = scopedCases
+    .map((c) => freshById.get(c.id) ?? resumed.get(c.id))
+    .filter((r): r is CaseResult => r != null)
 
   // ── Aggregate ──
   const total = results.length

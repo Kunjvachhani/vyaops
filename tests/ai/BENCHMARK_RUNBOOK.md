@@ -50,12 +50,35 @@ npm run test:benchmark -- --limit=6 --concurrency=3
 
 If the smoke run prints a clean summary, you're good for the full run.
 
+## Step 1b — Point the dialect layer at a DB that has the tables
+
+Layer 0 (`lookupDialect`) reads the Tier-3 `industry_dictionary` from the DB the
+env points at. `.env.local` points at **remote**, which may not have the dialect
+migrations. Run against **local** Supabase (which does, after `supabase migration
+up --local`) by overriding the DB env — the shell vars win over `--env-file`:
+
+```bash
+export NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+export SUPABASE_SERVICE_ROLE_KEY=$(npx supabase status | grep -i SERVICE_ROLE_KEY | grep -oE 'ey[A-Za-z0-9_.-]+' | head -1)
+```
+
+(Number words are Tier-1 static JSON and work without any DB.)
+
 ## Step 2 — Launch the full run in the background
 
 Run it so Claude can poll the live log without blocking:
 
 ```bash
 npm run test:benchmark > /tmp/benchmark.out 2>&1 &
+```
+
+**Resuming after an interrupted run** (e.g. an OpenRouter 402 / credit outage):
+`--resume` reuses the cleanly-scored cases from the latest `*.jsonl` and only
+runs the rest (errored + unrun). Saves cost/time on a re-run.
+
+```bash
+npm run test:benchmark -- --resume > /tmp/benchmark.out 2>&1 &     # auto-picks latest jsonl
+npm run test:benchmark -- --resume=tests/ai/benchmark-results-<ts>.jsonl &  # explicit
 ```
 
 The first lines of `/tmp/benchmark.out` print the exact `.jsonl` path. Capture it:
