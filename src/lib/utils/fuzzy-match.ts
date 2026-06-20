@@ -185,7 +185,9 @@ function stripHonorifics(name: string): string {
   return filtered.length > 0 ? filtered.join(' ') : normalizeStr(name)
 }
 
-function scoreAgainst(raw: string, candidate: string): number {
+// Exported so the AI benchmark scores products against catalogs with the exact
+// same logic production uses (prevents matcher drift between test and prod).
+export function scoreAgainst(raw: string, candidate: string): number {
   const a = normalizeStr(raw)
   const b = normalizeStr(candidate)
 
@@ -210,8 +212,10 @@ function scoreAgainst(raw: string, candidate: string): number {
  *
  * This fixes the core matching failure: "vijay" vs "Vijay Mehta" now scores
  * via first-token match (1.0) instead of whole-string Levenshtein (0.46).
+ *
+ * Exported so the AI benchmark uses production's exact customer-matching logic.
  */
-function tokenAwareScore(raw: string, candidate: string): number {
+export function tokenAwareScore(raw: string, candidate: string): number {
   const rawStripped = stripHonorifics(raw)
   const candidateStripped = stripHonorifics(candidate)
 

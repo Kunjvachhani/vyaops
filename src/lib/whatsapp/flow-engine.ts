@@ -110,7 +110,7 @@ export async function handleCustomerMessage(
   if (!customerId) return   // Unknown sender — already handled by webhook (log only)
 
   // Build org context for AI
-  const [{ data: customers }, { data: products }, { data: vendors }] = await Promise.all([
+  const [{ data: customers }, { data: products }, { data: vendors }, { data: org }] = await Promise.all([
     adminClient
       .from('customers')
       .select('id, name, aliases')
@@ -126,10 +126,16 @@ export async function handleCustomerMessage(
       .select('id, name')
       .eq('organization_id', orgId)
       .is('deleted_at', null),
+    adminClient
+      .from('organizations')
+      .select('industry_config')
+      .eq('id', orgId)
+      .maybeSingle(),
   ])
 
   const orgContext = {
     orgId,
+    industrySegment: org?.industry_config ?? undefined,
     customers: (customers ?? []).map((c) => ({ id: c.id, name: c.name })),
     products: (products ?? []).map((p) => ({ id: p.id, name: p.name })),
     vendors: (vendors ?? []).map((v) => ({ id: v.id, name: v.name })),

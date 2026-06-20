@@ -112,6 +112,9 @@ export interface EntityResult {
 
 export interface OrgContext {
   orgId: string
+  // Industry segment (e.g. 'foundry', 'textiles') — drives the Tier-3 industry
+  // dialect lookup (Layer 0). Optional for backward compatibility.
+  industrySegment?: string
   customers: Array<{ id: string; name: string; aliases?: string[] }>
   products: Array<{ id: string; name: string; aliases?: string[] }>
   vendors: Array<{ id: string; name: string; aliases?: string[] }>

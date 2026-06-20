@@ -22,10 +22,13 @@
 import { readFileSync, writeFileSync, appendFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { routeAI } from '@/lib/ai/model-router'
+import { routeAI, applyDialectHints } from '@/lib/ai/model-router'
 import { evaluateExtraction } from '@/lib/ai/eval-gate'
 import { CLASSIFY_SYSTEM_PROMPT } from '@/lib/ai/deepseek'
-import { levenshtein, soundexMatch } from '@/lib/utils/fuzzy-match'
+import { lookupDialect } from '@/lib/ai/dialect-lookup'
+// Production scoring functions — reused so benchmark matching can never drift
+// from production: tokenAwareScore for customers, scoreAgainst for products.
+import { tokenAwareScore, scoreAgainst } from '@/lib/utils/fuzzy-match'
 import { DeepSeekClassifyResponseSchema } from '@/types/ai'
 import type {
   IntentType,
@@ -123,29 +126,19 @@ interface CaseResult {
   error?: string
 }
 
-// ─── In-memory fuzzy matcher (mirrors src/lib/utils/fuzzy-match.ts scoreAgainst) ─
-
-function scoreAgainst(raw: string, candidate: string): number {
-  const a = raw.toLowerCase().trim()
-  const b = candidate.toLowerCase().trim()
-  if (a === b) return 1.0
-
-  const maxLen = Math.max([...a].length, [...b].length)
-  if (maxLen === 0) return 1.0
-
-  const levSim = 1 - levenshtein(a, b) / maxLen
-  const phoneticBonus = soundexMatch(raw, candidate) ? 0.15 : 0
-  return Math.min(1.0, levSim + phoneticBonus)
-}
+// ─── In-memory matcher (uses production scorers — see imports above) ─────────────
+// Customers use tokenAwareScore (first-name/honorific aware, matches production
+// matchCustomer); products use scoreAgainst (whole-string, matches matchProduct).
 
 function matchBest(
   raw: string,
-  candidates: string[]
+  candidates: string[],
+  scorer: (raw: string, candidate: string) => number
 ): { matched: string | null; confidence: number } {
   let best: string | null = null
   let bestScore = 0
   for (const c of candidates) {
-    const s = scoreAgainst(raw, c)
+    const s = scorer(raw, c)
     if (s > bestScore) {
       bestScore = s
       best = c
@@ -172,10 +165,17 @@ function extractJson(content: string): unknown {
 
 // ─── Pipeline for a single case ─────────────────────────────────────────────────
 
-function buildOrgContext(catalog: IndustryCatalog | undefined): OrgContext {
+// Dummy UUID — the dialect org-tier lookup queries org_dictionary by uuid; a
+// valid-shaped id avoids a Postgres cast error (it just returns no rows).
+const BENCHMARK_ORG_ID = '00000000-0000-0000-0000-000000000000'
+
+function buildOrgContext(
+  catalog: IndustryCatalog | undefined,
+  industrySegment: string
+): OrgContext {
   const customers = (catalog?.customers ?? []).map((name, i) => ({ id: `c${i}`, name }))
   const products = (catalog?.products ?? []).map((name, i) => ({ id: `p${i}`, name }))
-  return { orgId: 'benchmark', customers, products, vendors: [] }
+  return { orgId: BENCHMARK_ORG_ID, industrySegment, customers, products, vendors: [] }
 }
 
 function buildEntities(
@@ -204,7 +204,7 @@ function buildEntities(
 
 async function runCase(testCase: BenchmarkCase, catalog: IndustryCatalog | undefined): Promise<CaseResult> {
   const start = Date.now()
-  const orgContext = buildOrgContext(catalog)
+  const orgContext = buildOrgContext(catalog, testCase.industry ?? '')
 
   const expected = {
     intent: testCase.expected_intent,
@@ -241,33 +241,13 @@ async function runCase(testCase: BenchmarkCase, catalog: IndustryCatalog | undef
         { role: 'user', content: userContent },
       ],
       temperature: 0.1,
-      maxTokens: 512,
+      maxTokens: 800,
     })
 
     const deepseekTokens = classifyResp.usage.promptTokens + classifyResp.usage.completionTokens
 
     const parsed = DeepSeekClassifyResponseSchema.parse(extractJson(classifyResp.content))
     const entities = buildEntities(parsed)
-
-    // Step 2: in-memory fuzzy resolution against the industry catalog.
-    const customerEntity = entities.find((e) => e.type === 'customer_name')
-    const productEntity = entities.find((e) => e.type === 'product_name')
-
-    const customerMatch = customerEntity
-      ? matchBest(customerEntity.rawValue, orgContext.customers.map((c) => c.name))
-      : { matched: null, confidence: 0 }
-    const productMatch = productEntity
-      ? matchBest(productEntity.rawValue, orgContext.products.map((p) => p.name))
-      : { matched: null, confidence: 0 }
-
-    if (customerEntity && customerMatch.matched) {
-      customerEntity.normalizedValue = customerMatch.matched
-      customerEntity.confidence = customerMatch.confidence
-    }
-    if (productEntity && productMatch.matched) {
-      productEntity.normalizedValue = productMatch.matched
-      productEntity.confidence = productMatch.confidence
-    }
 
     const intent: IntentResult = {
       intent: parsed.intent,
@@ -279,6 +259,42 @@ async function runCase(testCase: BenchmarkCase, catalog: IndustryCatalog | undef
       entities,
       confidence: parsed.confidence,
       reasoning: parsed.original_normalized,
+    }
+
+    // Step 1b: Layer 0 — dialect dictionary pre-resolution (number words, product/
+    // customer slang). Same call + merge as production routeAndProcess. Reads the
+    // Tier-3 industry_dictionary from the DB the env points at (local for the run).
+    try {
+      const dialect = await lookupDialect({
+        message: testCase.input,
+        orgId: BENCHMARK_ORG_ID,
+        industrySegment: orgContext.industrySegment ?? '',
+      })
+      applyDialectHints(entityResult, dialect)
+    } catch {
+      // dialect layer is best-effort — never block the case on it
+    }
+
+    // Step 2: fuzzy resolution against the industry catalog. Customers use the
+    // token-aware scorer (matches production matchCustomer); products use the
+    // whole-string scorer (matches matchProduct).
+    const customerEntity = entityResult.entities.find((e) => e.type === 'customer_name')
+    const productEntity = entityResult.entities.find((e) => e.type === 'product_name')
+
+    const customerMatch = customerEntity
+      ? matchBest(customerEntity.rawValue, orgContext.customers.map((c) => c.name), tokenAwareScore)
+      : { matched: null, confidence: 0 }
+    const productMatch = productEntity
+      ? matchBest(productEntity.rawValue, orgContext.products.map((p) => p.name), scoreAgainst)
+      : { matched: null, confidence: 0 }
+
+    if (customerEntity && customerMatch.matched) {
+      customerEntity.normalizedValue = customerMatch.matched
+      customerEntity.confidence = customerMatch.confidence
+    }
+    if (productEntity && productMatch.matched) {
+      productEntity.normalizedValue = productMatch.matched
+      productEntity.confidence = productMatch.confidence
     }
 
     // Step 3: eval gate scoring (cross-model, via Qwen).

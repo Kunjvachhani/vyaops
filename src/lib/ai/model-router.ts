@@ -2,6 +2,7 @@ import { callDeepSeek, classifyIntent, extractEntities, CLASSIFY_SYSTEM_PROMPT }
 import { callOpenRouter } from './openrouter'
 import { evaluateExtraction, routeByScore } from './eval-gate'
 import { matchCustomer, matchProduct } from '@/lib/utils/fuzzy-match'
+import { lookupDialect } from './dialect-lookup'
 import { DeepSeekClassifyResponseSchema } from '@/types/ai'
 import type {
   AIRequest,
@@ -15,6 +16,7 @@ import type {
   EvalGateDecision,
   RouteAndProcessResult,
   EvaluateExtractionResult,
+  DialectLookupResult,
 } from '@/types/ai'
 
 const QWEN_MODEL = 'qwen/qwen3-235b-a22b'
@@ -199,6 +201,33 @@ type ResolutionFlags = {
   hasVendor: boolean
 }
 
+// Layer 0 of the Data Alignment Engine: fold dialect-dictionary pre-resolutions
+// into the AI's extracted entities BEFORE fuzzy matching. This is what makes the
+// product-slang (Tier 3) and number-word (Tier 1) dictionaries actually take
+// effect — the dialect canonical overrides the raw AI value so the downstream
+// matcher gets a clean, resolvable name/quantity.
+//
+// Exported so the AI benchmark applies the exact same merge logic (no drift).
+export function applyDialectHints(entities: EntityResult, dialect: DialectLookupResult): void {
+  const hints = dialect.pre_structured
+
+  function upsert(type: ExtractedEntity['type'], rawValue: string): void {
+    const existing = entities.entities.find((e) => e.type === type)
+    if (existing) existing.rawValue = rawValue
+    else entities.entities.push({ type, rawValue, confidence: 0.9 })
+  }
+
+  // Product slang → canonical product name (e.g. "chunni" → "Dupatta").
+  if (hints.product_hint) upsert('product_name', hints.product_hint)
+
+  // Customer alias → canonical (org/global dictionary resolutions).
+  if (hints.customer_hint) upsert('customer_name', hints.customer_hint)
+
+  // Spelled-out number words → integer quantity (e.g. "saath" → 60). The AI
+  // routinely mis-reads these, so a dictionary hit overrides the AI value.
+  if (hints.quantity != null && hints.quantity > 0) upsert('quantity', String(hints.quantity))
+}
+
 // Layer 4 of the Data Alignment Engine: resolve raw customer/product names
 // against master data via fuzzy matching, annotating each entity in place with
 // the canonical name (normalizedValue) and the match confidence. Failures leave
@@ -294,6 +323,20 @@ export async function routeAndProcess(
     } catch (fallbackError) {
       throw fallbackError
     }
+  }
+
+  // Step 2a: Layer 0 — dialect dictionary pre-resolution (number words, product/
+  // customer slang). Folds canonical hints into the extracted entities. Graceful:
+  // any failure (missing dialect tables, DB down) leaves the AI extraction as-is.
+  try {
+    const dialect = await lookupDialect({
+      message,
+      orgId: orgContext.orgId,
+      industrySegment: orgContext.industrySegment ?? '',
+    })
+    applyDialectHints(entities, dialect)
+  } catch {
+    // dialect layer is best-effort — never block extraction on it
   }
 
   // Step 2b: Layer 4 — resolve names to master data (annotates entities in place)

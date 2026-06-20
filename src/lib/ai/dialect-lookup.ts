@@ -135,18 +135,15 @@ function buildStaticMap(
     if (typeof entries !== 'object' || entries === null) continue;
 
     for (const [term, canonical] of Object.entries(entries as Record<string, unknown>)) {
-      if (term === '_note' || typeof canonical !== 'string') continue;
-      if (typeof canonical === 'number') {
-        map.set(normalizeDialectTerm(term), {
-          canonical: String(canonical),
-          category: section,
-        });
-      } else {
-        map.set(normalizeDialectTerm(term), {
-          canonical: canonical as string,
-          category: section,
-        });
-      }
+      // Accept both string canonicals (verbs, products…) AND numeric ones
+      // (number words like "das" → 10). The previous guard skipped all numbers,
+      // silently dropping the entire Tier-1 number dictionary.
+      if (term === '_note') continue;
+      if (typeof canonical !== 'string' && typeof canonical !== 'number') continue;
+      map.set(normalizeDialectTerm(term), {
+        canonical: String(canonical),
+        category: section,
+      });
     }
   }
 
