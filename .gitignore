@@ -35,3 +35,7 @@ next-env.d.ts
 
 # Testing
 coverage/
+
+# AI benchmark run artifacts
+tests/ai/benchmark-results-*.json
+tests/ai/benchmark-results-*.jsonl

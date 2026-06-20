@@ -199,6 +199,9 @@ export interface EvaluateExtractionResult {
   reasoning: string
   failureCodes: string[]
   decision: EvalGateDecision
+  // Token usage of the eval-gate LLM call. Present when the eval ran against the
+  // model; absent on the fallback path (eval gate unavailable).
+  usage?: AIUsage
 }
 
 export interface ExtractionInput {
