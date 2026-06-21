@@ -167,64 +167,7 @@ export async function buildVendorList(orgId: string): Promise<InteractiveMessage
   }
 }
 
-// ─── 5. Confirmation ──────────────────────────────────────────────────────────
-
-export function buildConfirmation(
-  type: string,
-  data: Record<string, unknown>
-): InteractiveMessage {
-  return {
-    type: 'button',
-    body: formatConfirmationBody(type, data),
-    buttons: [
-      { id: `confirm_${type}`, title: '✅ Confirm' },
-      { id: `edit_${type}`, title: '✏️ Edit' },
-      { id: `cancel_${type}`, title: '❌ Cancel' },
-    ],
-  }
-}
-
-function formatConfirmationBody(type: string, data: Record<string, unknown>): string {
-  if (type === 'order') {
-    const customer = (data.customer as string | undefined) ?? 'Unknown'
-    const product = (data.product as string | undefined) ?? 'Unknown'
-    const quantity = (data.quantity as number | undefined) ?? 0
-    const unit = (data.unit as string | undefined) ?? 'pcs'
-    const amountPaise = (data.amount_paise as number | undefined) ?? 0
-    return [
-      '📋 New Order:',
-      '',
-      `Customer: ${customer}`,
-      `Product: ${product}`,
-      `Quantity: ${quantity} ${unit}`,
-      `Amount: ${paiseToCurrency(amountPaise)}`,
-    ].join('\n')
-  }
-
-  if (type === 'invoice') {
-    const customer = (data.customer as string | undefined) ?? 'Unknown'
-    const amountPaise = (data.amount_paise as number | undefined) ?? 0
-    const dueDate = (data.due_date as string | undefined) ?? ''
-    return [
-      '🧾 New Invoice:',
-      '',
-      `Customer: ${customer}`,
-      `Amount: ${paiseToCurrency(amountPaise)}`,
-      ...(dueDate ? [`Due Date: ${dueDate}`] : []),
-    ].join('\n')
-  }
-
-  // Generic fallback: render all key-value pairs
-  const label = type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-  const lines = [`📋 ${label}:`, '']
-  for (const [key, value] of Object.entries(data)) {
-    const k = key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-    lines.push(`${k}: ${String(value ?? '')}`)
-  }
-  return lines.join('\n')
-}
-
-// ─── 6. Clarification ("Did you mean?") ──────────────────────────────────────
+// ─── 5. Clarification ("Did you mean?") ──────────────────────────────────────
 
 export function buildClarification(options: ClarificationOption[]): InteractiveMessage {
   const top = options.slice(0, 3)
