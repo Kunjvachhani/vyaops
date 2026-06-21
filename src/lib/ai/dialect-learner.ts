@@ -439,13 +439,14 @@ async function getAdminClient(): Promise<SupabaseAdmin> {
 }
 
 async function getAIClient() {
-  // Import model-router's AI call function
-  // Using dynamic import to avoid circular dependency at module init
+  // Import model-router's AI call function (routeAI: AIRequest → AIResponse,
+  // picks DeepSeek/Qwen + handles fallback). Dynamic import avoids a circular
+  // dependency at module init.
   try {
     const router = await import('./model-router');
-    return { callAI: router.callAI };
+    return { callAI: router.routeAI };
   } catch {
-    // Fallback: direct DeepSeek call if model-router not yet built
+    // Fallback: direct DeepSeek call if model-router fails to import
     const deepseek = await import('./deepseek');
     return { callAI: deepseek.callDeepSeek };
   }
