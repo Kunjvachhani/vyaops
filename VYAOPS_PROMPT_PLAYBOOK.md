@@ -2055,7 +2055,9 @@ When an AI extraction is wrong and the user corrects it (via WhatsApp "Edit" but
    - This means corrections improve BOTH the benchmark AND the dialect dictionary
 
 Also create the database migration for the corrections table:
-- supabase/migrations/20260615000001_create_corrections_table.sql
+- supabase/migrations/20260621000002_create_corrections_table.sql
+  (the illustrative 20260615000001 collided with the applied
+  20260615000001_create_invoices_storage_bucket.sql, so it was bumped)
 ```
 
 **VERIFY:**
@@ -2084,7 +2086,7 @@ Read docs/database/SCHEMA.md — the 3 new dictionary tables (org_dictionary, in
 Read docs/security/RLS_POLICIES.md — the dialect dictionary RLS section.
 
 PART 1: Create Supabase migration for 3 dictionary tables.
-File: supabase/migrations/20260615000002_create_dialect_tables.sql
+File: supabase/migrations/20260619000001_create_dialect_tables.sql
 
 TABLE industry_dictionary (platform-wide, no org_id):
 - id UUID PK, term TEXT NOT NULL, term_normalized TEXT NOT NULL
@@ -2305,7 +2307,7 @@ git push
 ```
 Read docs/ai/DIALECT_DICTIONARY.md — "Tier 3: Industry Dictionary" section.
 
-Create supabase/migrations/20260615000003_seed_industry_dictionary.sql:
+Create supabase/migrations/20260619000002_seed_industry_dictionary.sql:
 
 Seed industry_dictionary with terms for these 10 major Gujarat MSME industries
 (~20-30 terms each = ~250 rows total):
