@@ -676,6 +676,56 @@ async function executeModifyOrder(
   console.log('[flow-engine] MODIFY_ORDER confirmed:', order.order_number, resolvedMode, resolvedQuantity)
 }
 
+// ─── Correction capture (S4.3 producer) ──────────────────────────────────────
+// When the owner corrects a mis-extracted draft via /edit, record the
+// (original customer message, wrong extraction, corrected extraction) triple in
+// the `corrections` table. This is the single producer that feeds BOTH downstream
+// loops — benchmark growth (scripts/corrections-to-benchmark.ts) and dialect
+// learning (analyzeCorrection/learnFromCorrection). Best-effort: a logging
+// failure must never break the owner's correction UX.
+async function recordCorrection(
+  orgId: string,
+  chatPhone: string,
+  wrongPending: PendingOrderRow,
+  correctedPending: PendingOrderRow
+): Promise<void> {
+  try {
+    // The original customer message that was mis-extracted (via source_message_id).
+    const { data: sourceMsg } = await adminClient
+      .from('whatsapp_messages')
+      .select('message_body')
+      .eq('message_id', wrongPending.source_message_id)
+      .maybeSingle()
+
+    const originalMessage = sourceMsg?.message_body
+    if (!originalMessage) {
+      console.log('[flow-engine] recordCorrection: original message not found — skipping')
+      return
+    }
+
+    const { error } = await adminClient.from('corrections').insert({
+      organization_id: orgId,
+      customer_phone: chatPhone,
+      original_message: originalMessage,
+      wrong_extraction: wrongPending.extraction,
+      correct_extraction: correctedPending.extraction,
+      intent: correctedPending.intent,
+      source: 'whatsapp_edit',
+      pending_order_id: correctedPending.id,
+    })
+    if (error) {
+      console.error('[flow-engine] recordCorrection insert failed:', error.message)
+      return
+    }
+    console.log('[flow-engine] correction recorded (whatsapp_edit) for', chatPhone)
+  } catch (err) {
+    console.error(
+      '[flow-engine] recordCorrection failed (non-blocking):',
+      err instanceof Error ? err.message : err
+    )
+  }
+}
+
 // ─── Slash command handler ────────────────────────────────────────────────────
 
 export async function handleCommand(
@@ -706,8 +756,18 @@ export async function handleCommand(
 
     case '/edit':
       if (restText) {
-        // Re-run detection on the new text, then post draft immediately
+        // S4.3: capture the correction. Snapshot the active (wrong) pending,
+        // re-detect on the corrected text, then record the wrong→right pair.
+        const wrongPending = await getActivePending(orgId, chatPhone)
         await handleOwnerOrderTrigger(orgId, chatPhone, restText, true)
+        if (wrongPending) {
+          const correctedPending = await getActivePending(orgId, chatPhone)
+          // Only record when re-detection actually produced a new draft (an
+          // actionable correction) — a non-actionable /edit leaves the old row.
+          if (correctedPending && correctedPending.id !== wrongPending.id) {
+            await recordCorrection(orgId, chatPhone, wrongPending, correctedPending)
+          }
+        }
       }
       break
 

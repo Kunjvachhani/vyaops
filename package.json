@@ -12,7 +12,8 @@
     "test:benchmark": "tsx --env-file=.env.local tests/ai/run-benchmark.ts",
     "test:ai": "tsx --env-file=.env.local scripts/test-ai-pipeline.ts",
     "test:webhook": "tsx --env-file=.env.local scripts/test-webhook.ts",
-    "test:reminders": "tsx --env-file=.env.local scripts/test-payment-reminders.ts"
+    "test:reminders": "tsx --env-file=.env.local scripts/test-payment-reminders.ts",
+    "benchmark:from-corrections": "tsx --env-file=.env.local scripts/corrections-to-benchmark.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.16",
