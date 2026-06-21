@@ -210,17 +210,38 @@ type ResolutionFlags = {
 // Exported so the AI benchmark applies the exact same merge logic (no drift).
 export function applyDialectHints(entities: EntityResult, dialect: DialectLookupResult): void {
   const hints = dialect.pre_structured
+  const norm = (s: string): string => s.toLowerCase().trim()
 
+  function find(type: ExtractedEntity['type']): ExtractedEntity | undefined {
+    return entities.entities.find((e) => e.type === type)
+  }
+  function add(type: ExtractedEntity['type'], rawValue: string): void {
+    entities.entities.push({ type, rawValue, confidence: 0.9 })
+  }
   function upsert(type: ExtractedEntity['type'], rawValue: string): void {
-    const existing = entities.entities.find((e) => e.type === type)
+    const existing = find(type)
     if (existing) existing.rawValue = rawValue
-    else entities.entities.push({ type, rawValue, confidence: 0.9 })
+    else add(type, rawValue)
   }
 
-  // Product slang → canonical product name (e.g. "chunni" → "Dupatta").
-  if (hints.product_hint) upsert('product_name', hints.product_hint)
+  // Product slang → canonical, but FILL-don't-clobber: only canonicalize when
+  // the AI just echoed the slang term itself (raw === the resolved slang token),
+  // e.g. "chunni" → "Dupatta", "gbh" → "Gear Box Housing". When the AI extracted
+  // something more specific ("viscose kapdu"), the generic hint ("kapdu" →
+  // Cotton Fabric) must NOT overwrite it — leave it for fuzzy matching.
+  if (hints.product_hint) {
+    const existing = find('product_name')
+    if (!existing) {
+      add('product_name', hints.product_hint)
+    } else {
+      const productToken = dialect.resolved_tokens.find((t) => t.category === 'product')
+      if (productToken && norm(existing.rawValue) === norm(productToken.token)) {
+        existing.rawValue = hints.product_hint
+      }
+    }
+  }
 
-  // Customer alias → canonical (org/global dictionary resolutions).
+  // Customer alias → canonical (org/global dictionary — learned, authoritative).
   if (hints.customer_hint) upsert('customer_name', hints.customer_hint)
 
   // Spelled-out number words → integer quantity (e.g. "saath" → 60). The AI

@@ -355,7 +355,9 @@ export async function matchProduct(
     return { match: null, confidence: top?.score ?? 0, alternatives: [] }
   }
 
-  if (top.score >= 0.85) {
+  // Auto-match threshold lowered 0.85 → 0.80 to match matchCustomer — romanized
+  // dialect product names cluster in the 0.80-0.85 band.
+  if (top.score >= 0.80) {
     return { match: top.product, confidence: top.score, alternatives: [] }
   }
 
