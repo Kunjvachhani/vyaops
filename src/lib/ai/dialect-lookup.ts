@@ -15,6 +15,7 @@ import type {
   ResolvedToken,
   PreStructuredHints,
 } from '@/types/ai';
+import { captureWithContext } from '@/lib/utils/sentry';
 
 // Static JSON files (loaded once at module init)
 import universalDict from '@/config/dialect/universal.json';
@@ -174,7 +175,7 @@ async function getOrgDictionary(orgId: string): Promise<Map<string, DictEntry>> 
     .is('deleted_at', null);
 
   if (error || !data) {
-    console.error('[dialect-lookup] org_dictionary query error:', error?.message);
+    captureWithContext(new Error(error?.message ?? 'org_dictionary query failed'), { action: 'dialect-lookup/org_dictionary', org_id: orgId })
     return new Map();
   }
 
@@ -212,7 +213,7 @@ async function getIndustryDictionary(segment: string): Promise<Map<string, DictE
     .eq('is_active', true);
 
   if (error || !data) {
-    console.error('[dialect-lookup] industry_dictionary query error:', error?.message);
+    captureWithContext(new Error(error?.message ?? 'industry_dictionary query failed'), { action: 'dialect-lookup/industry_dictionary', segment })
     return new Map();
   }
 
@@ -250,7 +251,7 @@ async function getGlobalDictionary(): Promise<Map<string, DictEntry>> {
     .eq('is_active', true);
 
   if (error || !data) {
-    console.error('[dialect-lookup] global_dictionary query error:', error?.message);
+    captureWithContext(new Error(error?.message ?? 'global_dictionary query failed'), { action: 'dialect-lookup/global_dictionary' })
     return new Map();
   }
 

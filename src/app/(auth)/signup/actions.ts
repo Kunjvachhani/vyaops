@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { adminClient } from '@/lib/supabase/admin'
+import { captureWithContext } from '@/lib/utils/sentry'
 
 type SignupResult = { error: string } | { success: true }
 
@@ -26,14 +27,14 @@ export async function signupAction(formData: FormData): Promise<SignupResult> {
   })
 
   if (authError) {
-    console.error('[signup] auth.signUp error:', authError.message)
+    captureWithContext(new Error(authError.message), { action: 'signup/auth.signUp' })
     return { error: authError.message }
   }
 
   if (!authData.user) {
     // Supabase returns no user when email confirmation is required and the address
     // already exists — treat it as a generic failure so we don't leak that info.
-    console.error('[signup] auth.signUp returned no user (email may already exist or confirmation required)')
+    captureWithContext(new Error('auth.signUp returned no user'), { action: 'signup/auth.signUp/no-user' })
     return { error: 'Unable to create account. The email may already be registered.' }
   }
 
@@ -57,7 +58,7 @@ export async function signupAction(formData: FormData): Promise<SignupResult> {
       .single()
 
     if (orgError || !org) {
-      console.error('[signup] org insert error:', orgError?.message, orgError?.details)
+      captureWithContext(orgError ?? new Error('org insert returned null'), { action: 'signup/org-insert' })
       await adminClient.auth.admin.deleteUser(authUserId)
       return { error: orgError?.message ?? 'Failed to create organization.' }
     }
@@ -74,7 +75,7 @@ export async function signupAction(formData: FormData): Promise<SignupResult> {
     })
 
     if (userError) {
-      console.error('[signup] users insert error:', userError.message, userError.details)
+      captureWithContext(new Error(userError.message), { action: 'signup/user-insert' })
       await adminClient.auth.admin.deleteUser(authUserId)
       return { error: userError.message }
     }
@@ -89,20 +90,20 @@ export async function signupAction(formData: FormData): Promise<SignupResult> {
     })
 
     if (metaError) {
-      console.error('[signup] updateUserById error:', metaError.message)
+      captureWithContext(new Error(metaError.message), { action: 'signup/updateUserById' })
     }
 
     // Refresh the session so the new JWT includes org_id + role in user_metadata.
     // Without this the stale JWT causes a redirect loop: layout → /login → /dashboard → repeat.
     const { error: refreshError } = await supabase.auth.refreshSession()
     if (refreshError) {
-      console.error('[signup] refreshSession error:', refreshError.message)
+      captureWithContext(new Error(refreshError.message), { action: 'signup/refreshSession' })
       // Non-fatal: user can sign in manually to get a fresh JWT
     }
 
     return { success: true }
   } catch (err) {
-    console.error('[signup] unexpected error:', err)
+    captureWithContext(err, { action: 'signup/unexpected' })
     await adminClient.auth.admin.deleteUser(authUserId).catch(() => {})
     return { error: err instanceof Error ? err.message : 'An unexpected error occurred.' }
   }

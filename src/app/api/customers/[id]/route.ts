@@ -5,6 +5,7 @@ import type { Database } from '@/types/database'
 import { diffChanges, logAudit } from '@/lib/utils/audit'
 import { updateCustomerSchema } from '@/lib/validations/customer'
 import { softDelete, SoftDeleteError } from '@/lib/utils/soft-delete'
+import { captureWithContext } from '@/lib/utils/sentry'
 
 type CustomerRow = Database['public']['Tables']['customers']['Row']
 type CustomerUpdate = Database['public']['Tables']['customers']['Update']
@@ -157,7 +158,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
     .single()
 
   if (updateErr || !updatedRaw) {
-    console.error('[PATCH /api/customers/[id]]', updateErr)
+    captureWithContext(updateErr ?? new Error('update returned null'), { action: 'PATCH /api/customers/[id]', org_id: user.org_id, user_role: user.role })
     return NextResponse.json({ error: 'Failed to update customer', code: 'DB_ERROR' }, { status: 500 })
   }
 
@@ -201,7 +202,7 @@ export async function DELETE(req: NextRequest, { params }: RouteContext) {
       if (err.code === 'NOT_FOUND' || err.code === 'ALREADY_DELETED') {
         return NextResponse.json({ error: 'Customer not found', code: 'NOT_FOUND' }, { status: 404 })
       }
-      console.error('[DELETE /api/customers/[id]]', err)
+      captureWithContext(err, { action: 'DELETE /api/customers/[id]', org_id: user.org_id, user_role: user.role })
       return NextResponse.json({ error: 'Failed to delete customer', code: 'DB_ERROR' }, { status: 500 })
     }
     throw err

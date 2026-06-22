@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import type { Database } from '@/types/database'
+import { captureWithContext } from '@/lib/utils/sentry'
 
 type ProductRow = Database['public']['Tables']['products']['Row']
 type ProductSummary = Pick<ProductRow, 'id' | 'name' | 'unit' | 'unit_price_paise' | 'code'>
@@ -39,7 +40,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await query
 
   if (error) {
-    console.error('[GET /api/products]', error)
+    captureWithContext(error, { action: 'GET /api/products', org_id: user.org_id, user_role: user.role })
     return NextResponse.json({ error: 'Failed to fetch products', code: 'DB_ERROR' }, { status: 500 })
   }
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/supabase/server'
+import { captureWithContext } from '@/lib/utils/sentry'
 import { InvoiceRenderError, renderInvoice } from '@/lib/invoices/render'
 
 type RouteContext = { params: Promise<{ id: string }> }
@@ -33,7 +34,7 @@ export async function POST(_req: NextRequest, { params }: RouteContext) {
       const status = err.code === 'NOT_FOUND' ? 404 : err.code === 'DATA_INTEGRITY_ERROR' ? 422 : 500
       return NextResponse.json({ error: err.message, code: err.code }, { status })
     }
-    console.error('[POST /api/invoices/[id]/pdf]', err)
+    captureWithContext(err, { action: 'POST /api/invoices/[id]/pdf', org_id: user.org_id, user_role: user.role })
     return NextResponse.json(
       { error: 'Failed to generate invoice PDF', code: 'PDF_GENERATION_ERROR' },
       { status: 500 }

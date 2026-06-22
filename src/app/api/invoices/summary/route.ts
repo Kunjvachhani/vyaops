@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, getCurrentUser } from '@/lib/supabase/server'
+import { captureWithContext } from '@/lib/utils/sentry'
 
 const UNPAID_STATUSES = ['draft', 'sent', 'partially_paid']
 
@@ -34,7 +35,7 @@ export async function GET(_req: NextRequest) {
     .is('deleted_at', null)
 
   if (unpaidErr) {
-    console.error('[GET /api/invoices/summary] unpaid query', unpaidErr)
+    captureWithContext(unpaidErr, { action: 'GET /api/invoices/summary/unpaid', org_id: user.org_id, user_role: user.role })
     return NextResponse.json({ error: 'Failed to load summary', code: 'DB_ERROR' }, { status: 500 })
   }
 
@@ -61,7 +62,7 @@ export async function GET(_req: NextRequest) {
     .is('deleted_at', null)
 
   if (payErr) {
-    console.error('[GET /api/invoices/summary] payments query', payErr)
+    captureWithContext(payErr, { action: 'GET /api/invoices/summary/payments', org_id: user.org_id, user_role: user.role })
     return NextResponse.json({ error: 'Failed to load summary', code: 'DB_ERROR' }, { status: 500 })
   }
 

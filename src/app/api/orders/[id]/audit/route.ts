@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { createClient, getCurrentUser } from '@/lib/supabase/server'
+import { captureWithContext } from '@/lib/utils/sentry'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -38,7 +39,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     .limit(50)
 
   if (error) {
-    console.error('[GET /api/orders/[id]/audit]', error)
+    captureWithContext(error, { action: 'GET /api/orders/[id]/audit', org_id: user.org_id, user_role: user.role })
     return NextResponse.json({ error: 'Failed to fetch audit log', code: 'DB_ERROR' }, { status: 500 })
   }
 

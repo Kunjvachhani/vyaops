@@ -10,6 +10,7 @@
  */
 
 import { adminClient } from '@/lib/supabase/admin'
+import { captureWithContext } from '@/lib/utils/sentry'
 import { logAudit } from '@/lib/utils/audit'
 import { routeAndProcess } from '@/lib/ai/model-router'
 import { classifyOwnerReply, parseConfirmation } from '@/lib/ai/deepseek'
@@ -82,7 +83,11 @@ async function expireOldAndInsertNew(
     .single()
 
   if (error) {
-    console.error('[flow-engine] failed to insert pending_order:', error.message)
+    captureWithContext(new Error(error.message), {
+      action: 'flow-engine/expireOldAndInsertNew',
+      org_id: orgId,
+      supabase_code: error.code,
+    })
     return null
   }
 
@@ -145,7 +150,7 @@ export async function handleCustomerMessage(
   try {
     result = await routeAndProcess(text, orgContext)
   } catch (err) {
-    console.error('[flow-engine] routeAndProcess failed:', err instanceof Error ? err.message : err)
+    captureWithContext(err, { action: 'flow-engine/routeAndProcess', org_id: orgId })
     return
   }
 
@@ -290,7 +295,11 @@ async function handleEchoForDetected(
   const locale = await getOrgLocale(orgId)
   const draftText = await buildDraftForPending(pending, orgId, locale)
   if (!draftText) {
-    console.error('[flow-engine] could not build draft for pending:', pending.id)
+    captureWithContext(new Error('buildDraftForPending returned null'), {
+      action: 'flow-engine/sendDraft',
+      org_id: orgId,
+      pending_id: pending.id,
+    })
     return
   }
 
@@ -299,9 +308,10 @@ async function handleEchoForDetected(
   if (!sendResult.success) {
     // Draft never reached the customer — keep state 'detected' so the owner's
     // next affirmation retries the draft. Never advance state on a failed send.
-    console.error('[flow-engine] draft send FAILED — pending_order stays detected:', {
+    captureWithContext(new Error(sendResult.error ?? 'draft send failed'), {
+      action: 'flow-engine/sendDraft',
+      org_id: orgId,
       pending_id: pending.id,
-      error: sendResult.error,
     })
     return
   }
@@ -495,7 +505,11 @@ async function executeNewOrder(
   }
 
   if (!pending.customer_id || !productId || !quantity) {
-    console.error('[flow-engine] executeNewOrder: missing customer/product/quantity', pending.id)
+    captureWithContext(new Error('executeNewOrder: missing customer/product/quantity'), {
+      action: 'flow-engine/executeNewOrder',
+      org_id: orgId,
+      pending_id: pending.id,
+    })
     return
   }
 
@@ -516,7 +530,7 @@ async function executeNewOrder(
       auditMetadata: { via_whatsapp: true, pending_order_id: pending.id, chat_phone: chatPhone },
     })
   } catch (err) {
-    console.error('[flow-engine] createOrder failed:', err instanceof Error ? err.message : err)
+    captureWithContext(err, { action: 'flow-engine/createOrder', org_id: orgId, pending_id: pending.id })
     return
   }
 
@@ -555,7 +569,11 @@ async function executeCancelOrder(
   locale: Locale
 ): Promise<void> {
   if (!pending.target_order_id) {
-    console.error('[flow-engine] executeCancelOrder: no target_order_id', pending.id)
+    captureWithContext(new Error('executeCancelOrder: no target_order_id'), {
+      action: 'flow-engine/executeCancelOrder',
+      org_id: orgId,
+      pending_id: pending.id,
+    })
     return
   }
 
@@ -566,7 +584,12 @@ async function executeCancelOrder(
     .maybeSingle()
 
   if (!order) {
-    console.error('[flow-engine] executeCancelOrder: order not found', pending.target_order_id)
+    captureWithContext(new Error('executeCancelOrder: order not found'), {
+      action: 'flow-engine/executeCancelOrder',
+      org_id: orgId,
+      pending_id: pending.id,
+      target_order_id: pending.target_order_id,
+    })
     return
   }
 
@@ -605,7 +628,11 @@ async function executeModifyOrder(
   locale: Locale
 ): Promise<void> {
   if (!pending.target_order_id) {
-    console.error('[flow-engine] executeModifyOrder: no target_order_id', pending.id)
+    captureWithContext(new Error('executeModifyOrder: no target_order_id'), {
+      action: 'flow-engine/executeModifyOrder',
+      org_id: orgId,
+      pending_id: pending.id,
+    })
     return
   }
 
@@ -620,7 +647,11 @@ async function executeModifyOrder(
     .maybeSingle()
 
   if (!order || !newQuantity) {
-    console.error('[flow-engine] executeModifyOrder: missing order or quantity', pending.id)
+    captureWithContext(new Error('executeModifyOrder: missing order or quantity'), {
+      action: 'flow-engine/executeModifyOrder',
+      org_id: orgId,
+      pending_id: pending.id,
+    })
     return
   }
 
@@ -744,15 +775,15 @@ async function recordCorrection(
       pending_order_id: correctedPending.id,
     })
     if (error) {
-      console.error('[flow-engine] recordCorrection insert failed:', error.message)
+      captureWithContext(new Error(error.message), {
+        action: 'flow-engine/recordCorrection',
+        supabase_code: error.code,
+      })
       return
     }
     console.log('[flow-engine] correction recorded (whatsapp_edit) for', chatPhone)
   } catch (err) {
-    console.error(
-      '[flow-engine] recordCorrection failed (non-blocking):',
-      err instanceof Error ? err.message : err
-    )
+    captureWithContext(err, { action: 'flow-engine/recordCorrection' })
   }
 }
 

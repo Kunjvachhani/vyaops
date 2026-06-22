@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'crypto'
 import { adminClient } from '@/lib/supabase/admin'
+import { captureWithContext } from '@/lib/utils/sentry'
 import type {
   Button,
   Section,
@@ -108,11 +109,12 @@ async function callGraphApi(
     const errData = (await res.json()) as MetaErrorResponse
     const { code, error_subcode, message } = errData.error
     lastError = `Meta API error ${code}${error_subcode ? `/${error_subcode}` : ''}: ${message}`
-    // One field per line — Vercel MCP table truncates columns ~35 chars
-    console.error(`[meta-sub] ${error_subcode ?? 'none'}`)
-    console.error(`[meta-code] ${code}`)
-    console.error(`[meta-http] ${res.status}`)
-    console.error(`[meta-msg] ${message.slice(0, 80)}`)
+    captureWithContext(new Error(lastError), {
+      action: 'meta-cloud-api/callGraphApi',
+      meta_code: code,
+      meta_subcode: error_subcode ?? null,
+      http_status: res.status,
+    })
 
     // Non-retriable: permanent 4xx client errors (but retry 429 rate limits)
     if (res.status >= 400 && res.status < 500 && res.status !== 429) {
@@ -148,7 +150,11 @@ function logOutboundMessage(
     })
     .then(({ error }) => {
       if (error) {
-        console.error('[WhatsApp] Failed to log outbound message:', error)
+        captureWithContext(new Error(error.message), {
+          action: 'meta-cloud-api/logOutboundMessage',
+          org_id: organizationId,
+          supabase_code: error.code,
+        })
       }
     })
 }
@@ -171,11 +177,10 @@ async function sendAndLog(
     const error = err instanceof Error ? err.message : 'Unknown error'
     // Never swallow send failures silently — this is the only place the
     // Graph API error surfaces.
-    console.error(`[meta-api] send failed: ${error}`, {
+    captureWithContext(err, {
+      action: 'meta-cloud-api/sendAndLog',
       org_id: organizationId,
       message_type: messageType,
-      env_pid: (process.env.META_WHATSAPP_PHONE_NUMBER_ID ?? '').trim() || 'UNSET',
-      token_prefix: (process.env.META_WHATSAPP_ACCESS_TOKEN ?? '').slice(0, 10) || 'UNSET',
     })
     return { success: false, error }
   }

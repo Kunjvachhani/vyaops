@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { requireInternalAuth } from '@/lib/utils/internal-auth'
+import { captureWithContext } from '@/lib/utils/sentry'
 import { paiseToInvoiceAmount } from '@/lib/utils/currency'
 import type { Database } from '@/types/database'
 
@@ -70,7 +71,7 @@ export async function GET(request: NextRequest) {
     .order('due_date', { ascending: true })
 
   if (error) {
-    console.error('[GET /api/invoices/overdue]', error)
+    captureWithContext(error, { action: 'GET /api/invoices/overdue' })
     return NextResponse.json(
       { error: 'Failed to fetch overdue invoices', code: 'DB_ERROR' },
       { status: 500 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { adminClient } from '@/lib/supabase/admin'
 import { requireInternalAuth } from '@/lib/utils/internal-auth'
+import { captureWithContext } from '@/lib/utils/sentry'
 import { createOrder } from '@/lib/orders/create-order'
 import type { Database } from '@/types/database'
 
@@ -118,8 +119,7 @@ export async function POST(request: NextRequest) {
       idempotent: result.idempotent,
     })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    console.error('[whatsapp-create] createOrder failed:', msg)
+    captureWithContext(err, { action: 'POST /api/orders/whatsapp-create' })
     return NextResponse.json({ error: 'Failed to create order', code: 'DB_ERROR' }, { status: 500 })
   }
 }

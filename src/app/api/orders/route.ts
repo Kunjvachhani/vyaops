@@ -4,6 +4,7 @@ import { adminClient } from '@/lib/supabase/admin'
 import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import type { Database } from '@/types/database'
 import { logAudit } from '@/lib/utils/audit'
+import { captureWithContext } from '@/lib/utils/sentry'
 import { createOrderSchema } from '@/lib/validations/order'
 
 type CustomerRow = Database['public']['Tables']['customers']['Row']
@@ -94,7 +95,7 @@ export async function GET(req: NextRequest) {
   const { data: ordersRaw, error, count } = await query
 
   if (error) {
-    console.error('[GET /api/orders]', error)
+    captureWithContext(error, { action: 'GET /api/orders', org_id: user.org_id, user_role: user.role })
     return NextResponse.json({ error: 'Failed to fetch orders', code: 'DB_ERROR' }, { status: 500 })
   }
 
@@ -208,7 +209,7 @@ export async function POST(req: NextRequest) {
     'generate_order_number'
   )
   if (seqErr || !orderNumber) {
-    console.error('[POST /api/orders] generate_order_number rpc failed', seqErr)
+    captureWithContext(seqErr ?? new Error('generate_order_number returned null'), { action: 'POST /api/orders/seq', org_id: user.org_id, user_role: user.role })
     return NextResponse.json(
       { error: 'Failed to generate order number', code: 'SEQ_ERROR' },
       { status: 500 }
@@ -235,7 +236,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (insertErr || !createdRaw) {
-    console.error('[POST /api/orders] insert failed', insertErr)
+    captureWithContext(insertErr ?? new Error('insert returned null'), { action: 'POST /api/orders', org_id: user.org_id, user_role: user.role })
     return NextResponse.json({ error: 'Failed to create order', code: 'DB_ERROR' }, { status: 500 })
   }
 

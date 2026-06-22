@@ -3,6 +3,7 @@ import { adminClient } from '@/lib/supabase/admin'
 import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import type { Database } from '@/types/database'
 import { diffChanges, logAudit } from '@/lib/utils/audit'
+import { captureWithContext } from '@/lib/utils/sentry'
 import { ORDER_STATUSES, STATUS_TRANSITIONS, updateOrderSchema } from '@/lib/validations/order'
 import type { OrderStatus } from '@/lib/validations/order'
 import { softDelete, SoftDeleteError } from '@/lib/utils/soft-delete'
@@ -161,7 +162,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
     .single()
 
   if (updateErr || !updatedRaw) {
-    console.error('[PATCH /api/orders/[id]]', updateErr)
+    captureWithContext(updateErr ?? new Error('update returned null'), { action: 'PATCH /api/orders/[id]', org_id: user.org_id, user_role: user.role })
     return NextResponse.json({ error: 'Failed to update order', code: 'DB_ERROR' }, { status: 500 })
   }
 
@@ -205,7 +206,7 @@ export async function DELETE(req: NextRequest, { params }: RouteContext) {
       if (err.code === 'NOT_FOUND' || err.code === 'ALREADY_DELETED') {
         return NextResponse.json({ error: 'Order not found', code: 'NOT_FOUND' }, { status: 404 })
       }
-      console.error('[DELETE /api/orders/[id]]', err)
+      captureWithContext(err, { action: 'DELETE /api/orders/[id]', org_id: user.org_id, user_role: user.role })
       return NextResponse.json({ error: 'Failed to delete order', code: 'DB_ERROR' }, { status: 500 })
     }
     throw err

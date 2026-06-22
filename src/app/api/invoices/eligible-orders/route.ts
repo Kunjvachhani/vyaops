@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, getCurrentUser } from '@/lib/supabase/server'
+import { captureWithContext } from '@/lib/utils/sentry'
 import type { Database } from '@/types/database'
 
 type OrderRow = Database['public']['Tables']['orders']['Row']
@@ -28,7 +29,7 @@ export async function GET(_req: NextRequest) {
     .is('deleted_at', null)
 
   if (invErr) {
-    console.error('[GET /api/invoices/eligible-orders] invoices query', invErr)
+    captureWithContext(invErr, { action: 'GET /api/invoices/eligible-orders/invoices', org_id: user.org_id, user_role: user.role })
     return NextResponse.json({ error: 'Failed to load orders', code: 'DB_ERROR' }, { status: 500 })
   }
 
@@ -56,7 +57,7 @@ export async function GET(_req: NextRequest) {
   const { data: ordersRaw, error } = await query
 
   if (error) {
-    console.error('[GET /api/invoices/eligible-orders] orders query', error)
+    captureWithContext(error, { action: 'GET /api/invoices/eligible-orders/orders', org_id: user.org_id, user_role: user.role })
     return NextResponse.json({ error: 'Failed to load orders', code: 'DB_ERROR' }, { status: 500 })
   }
 

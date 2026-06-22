@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/supabase/server'
 import { getPlatformAdmin } from '@/lib/supabase/platform-admin'
+import { captureWithContext } from '@/lib/utils/sentry'
 import { isSoftDeletableTable } from '@/lib/utils/soft-delete'
 
 // GET /api/admin/deleted?table=orders[&limit=50][&org_id=<uuid>]
@@ -58,7 +59,7 @@ export async function GET(req: NextRequest) {
     .limit(limit)
 
   if (error) {
-    console.error('[GET /api/admin/deleted]', error)
+    captureWithContext(error, { action: 'GET /api/admin/deleted', org_id: user.org_id, user_role: user.role })
     return NextResponse.json({ error: 'Failed to load deleted records', code: 'DB_ERROR' }, { status: 500 })
   }
 

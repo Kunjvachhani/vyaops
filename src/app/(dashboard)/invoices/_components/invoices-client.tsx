@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { captureWithContext } from '@/lib/utils/sentry'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -116,7 +117,7 @@ export function InvoicesClient({ canDelete = false }: { canDelete?: boolean }) {
       .then((json: { data: Summary } | null) => {
         if (json) setSummary(json.data)
       })
-      .catch(console.error)
+      .catch((e: unknown) => captureWithContext(e, { action: 'invoices-client/fetch' }))
   }, [])
 
   const doFetch = useCallback((p: number) => {
@@ -141,7 +142,7 @@ export function InvoicesClient({ canDelete = false }: { canDelete?: boolean }) {
           setPagination(json.pagination)
         }
       })
-      .catch(console.error)
+      .catch((e: unknown) => captureWithContext(e, { action: 'invoices-client/fetch' }))
       .finally(() => setLoading(false))
   }, [])
 

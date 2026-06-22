@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireInternalAuth } from '@/lib/utils/internal-auth'
+import { captureWithContext } from '@/lib/utils/sentry'
 
 // Error sink for the n8n Error Trigger branch. Writes a structured log line
 // (the hook point for Sentry once @sentry/nextjs is wired in Sprint 4) and
@@ -36,14 +37,13 @@ export async function POST(request: NextRequest) {
 
   const { source, error, workflow, node, executionId, orgId } = parsed.data
 
-  // TODO(Sprint 4): forward to Sentry with org/workflow context.
-  console.error('[n8n-error]', {
+  captureWithContext(new Error(error ?? 'n8n workflow error'), {
+    action: 'n8n/error-trigger',
+    org_id: orgId,
     source: source ?? 'unknown',
     workflow: workflow ?? 'unknown',
     node: node ?? 'unknown',
-    executionId: executionId ?? null,
-    orgId: orgId ?? null,
-    error: error ?? 'unknown',
+    execution_id: String(executionId ?? ''),
   })
 
   return NextResponse.json({ logged: true })

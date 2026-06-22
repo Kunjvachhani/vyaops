@@ -1,4 +1,5 @@
 import { adminClient } from '@/lib/supabase/admin'
+import { captureWithContext } from '@/lib/utils/sentry'
 import type { Database } from '@/types/database'
 import { computeGst, isIntrastate } from '@/lib/utils/gst'
 import {
@@ -171,7 +172,7 @@ export async function renderInvoice(orgId: string, invoiceId: string): Promise<R
   try {
     buffer = await generateInvoicePDF(invoiceData)
   } catch (err) {
-    console.error('[renderInvoice] render failed', err)
+    captureWithContext(err, { action: 'renderInvoice/generatePDF', org_id: orgId, invoice_id: invoiceId })
     throw new InvoiceRenderError('Failed to generate invoice PDF', 'PDF_GENERATION_ERROR')
   }
 
@@ -185,14 +186,14 @@ export async function renderInvoice(orgId: string, invoiceId: string): Promise<R
     })
 
   if (uploadErr) {
-    console.error('[renderInvoice] storage upload failed', uploadErr)
+    captureWithContext(new Error(uploadErr.message), { action: 'renderInvoice/storageUpload', org_id: orgId, invoice_id: invoiceId })
   } else {
     const { data: signed, error: signErr } = await adminClient.storage
       .from(INVOICE_STORAGE_BUCKET)
       .createSignedUrl(path, INVOICE_SIGNED_URL_TTL_SECONDS)
 
     if (signErr || !signed) {
-      console.error('[renderInvoice] signed url failed', signErr)
+      captureWithContext(new Error(signErr?.message ?? 'createSignedUrl returned null'), { action: 'renderInvoice/signedUrl', org_id: orgId, invoice_id: invoiceId })
     } else {
       signedUrl = signed.signedUrl
       const { error: updateErr } = await adminClient
@@ -200,7 +201,7 @@ export async function renderInvoice(orgId: string, invoiceId: string): Promise<R
         .update({ pdf_url: signed.signedUrl })
         .eq('id', invoice.id)
         .eq('organization_id', orgId)
-      if (updateErr) console.error('[renderInvoice] pdf_url update failed', updateErr)
+      if (updateErr) captureWithContext(new Error(updateErr.message), { action: 'renderInvoice/pdfUrlUpdate', org_id: orgId, invoice_id: invoiceId })
     }
   }
 

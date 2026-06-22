@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { requireInternalAuth } from '@/lib/utils/internal-auth'
+import { captureWithContext } from '@/lib/utils/sentry'
 import { paiseToCurrency } from '@/lib/utils/currency'
 import type { Database } from '@/types/database'
 
@@ -95,7 +96,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const firstError =
     orgsRes.error || ownersRes.error || yOrdersRes.error || prodRes.error || overdueRes.error
   if (firstError) {
-    console.error('[GET /api/orders/daily-summary]', firstError)
+    captureWithContext(firstError, { action: 'GET /api/orders/daily-summary' })
     return NextResponse.json(
       { error: 'Failed to build daily summaries', code: 'DB_ERROR' },
       { status: 500 }

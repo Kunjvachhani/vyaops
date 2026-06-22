@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { adminClient } from '@/lib/supabase/admin'
 import { requireInternalAuth } from '@/lib/utils/internal-auth'
 import { logAudit } from '@/lib/utils/audit'
+import { captureWithContext } from '@/lib/utils/sentry'
 import type { Database } from '@/types/database'
 
 type InvoiceRow = Database['public']['Tables']['invoices']['Row']
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
   > | null
 
   if (fetchErr) {
-    console.error('[POST /api/invoices/[id]/reminder] fetch failed', fetchErr)
+    captureWithContext(fetchErr, { action: 'POST /api/invoices/[id]/reminder/fetch' })
     return NextResponse.json({ error: 'Failed to load invoice', code: 'DB_ERROR' }, { status: 500 })
   }
   if (!current) {
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     .single()
 
   if (updateErr || !updatedRaw) {
-    console.error('[POST /api/invoices/[id]/reminder] update failed', updateErr)
+    captureWithContext(updateErr ?? new Error('reminder update returned null'), { action: 'POST /api/invoices/[id]/reminder/update', org_id: current.organization_id })
     return NextResponse.json({ error: 'Failed to record reminder', code: 'DB_ERROR' }, { status: 500 })
   }
 

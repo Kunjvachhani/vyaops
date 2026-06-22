@@ -1,4 +1,5 @@
 import { adminClient } from '@/lib/supabase/admin'
+import { captureWithContext } from '@/lib/utils/sentry'
 import type { AuditSource } from '@/lib/utils/audit'
 
 /**
@@ -84,11 +85,11 @@ async function writeAudit(
   })
 
   if (error) {
-    // Wire to Sentry.captureException once @sentry/nextjs is installed.
-    console.error('[soft-delete] Failed to write audit_log entry', {
-      supabaseError: error,
+    captureWithContext(new Error(error.message), {
+      action: 'soft-delete/writeAudit',
       table,
-      action,
+      audit_action: action,
+      supabase_code: error.code,
     })
   }
 }

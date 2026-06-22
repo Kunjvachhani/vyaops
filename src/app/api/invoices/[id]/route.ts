@@ -3,6 +3,7 @@ import { adminClient } from '@/lib/supabase/admin'
 import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import type { Database } from '@/types/database'
 import { diffChanges, logAudit } from '@/lib/utils/audit'
+import { captureWithContext } from '@/lib/utils/sentry'
 import {
   INVOICE_STATUS_TRANSITIONS,
   MANUAL_INVOICE_STATUSES,
@@ -210,7 +211,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
       .single()
 
     if (payErr || !payRaw) {
-      console.error('[PATCH /api/invoices/[id]] payment insert failed', payErr)
+      captureWithContext(payErr ?? new Error('payment insert returned null'), { action: 'PATCH /api/invoices/[id]/payment', org_id: user.org_id, user_role: user.role })
       return NextResponse.json(
         { error: 'Failed to record payment', code: 'DB_ERROR' },
         { status: 500 }
@@ -233,7 +234,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
       .single()
 
     if (updateErr || !updatedRaw) {
-      console.error('[PATCH /api/invoices/[id]] invoice update after payment failed', updateErr)
+      captureWithContext(updateErr ?? new Error('invoice update after payment returned null'), { action: 'PATCH /api/invoices/[id]/payment-update', org_id: user.org_id, user_role: user.role })
       return NextResponse.json(
         { error: 'Failed to update invoice', code: 'DB_ERROR' },
         { status: 500 }
@@ -301,7 +302,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
     .single()
 
   if (updateErr || !updatedRaw) {
-    console.error('[PATCH /api/invoices/[id]]', updateErr)
+    captureWithContext(updateErr ?? new Error('update returned null'), { action: 'PATCH /api/invoices/[id]', org_id: user.org_id, user_role: user.role })
     return NextResponse.json(
       { error: 'Failed to update invoice', code: 'DB_ERROR' },
       { status: 500 }
@@ -373,7 +374,7 @@ export async function DELETE(req: NextRequest, { params }: RouteContext) {
       if (err.code === 'NOT_FOUND' || err.code === 'ALREADY_DELETED') {
         return NextResponse.json({ error: 'Invoice not found', code: 'NOT_FOUND' }, { status: 404 })
       }
-      console.error('[DELETE /api/invoices/[id]]', err)
+      captureWithContext(err, { action: 'DELETE /api/invoices/[id]', org_id: user.org_id, user_role: user.role })
       return NextResponse.json({ error: 'Failed to delete invoice', code: 'DB_ERROR' }, { status: 500 })
     }
     throw err

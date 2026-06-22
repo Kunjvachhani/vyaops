@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, getCurrentUser } from '@/lib/supabase/server'
+import { captureWithContext } from '@/lib/utils/sentry'
 import type { Database } from '@/types/database'
 import { computeGst, isIntrastate } from '@/lib/utils/gst'
 import {
@@ -129,7 +130,7 @@ export async function POST(req: NextRequest) {
   try {
     buffer = await generateInvoicePDF(invoiceData)
   } catch (err) {
-    console.error('[POST /api/invoices/preview] render failed', err)
+    captureWithContext(err, { action: 'POST /api/invoices/preview', org_id: user.org_id, user_role: user.role })
     return NextResponse.json(
       { error: 'Failed to generate preview', code: 'PDF_GENERATION_ERROR' },
       { status: 500 }

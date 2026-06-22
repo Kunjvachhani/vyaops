@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getCurrentUser } from '@/lib/supabase/server'
 import { getPlatformAdmin } from '@/lib/supabase/platform-admin'
+import { captureWithContext } from '@/lib/utils/sentry'
 import { restore, SoftDeleteError, SOFT_DELETABLE_TABLES } from '@/lib/utils/soft-delete'
 
 const restoreSchema = z.object({
@@ -75,7 +76,7 @@ export async function POST(req: NextRequest) {
       if (err.code === 'NOT_FOUND' || err.code === 'NOT_DELETED') {
         return NextResponse.json({ error: 'Record not found or not deleted', code: 'NOT_FOUND' }, { status: 404 })
       }
-      console.error('[POST /api/admin/restore]', err)
+      captureWithContext(err, { action: 'POST /api/admin/restore', org_id: user.org_id, user_role: user.role })
       return NextResponse.json({ error: 'Failed to restore record', code: 'DB_ERROR' }, { status: 500 })
     }
     throw err

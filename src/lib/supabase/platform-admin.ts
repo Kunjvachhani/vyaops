@@ -1,5 +1,6 @@
 import { adminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/supabase/server'
+import { captureWithContext } from '@/lib/utils/sentry'
 
 export type PlatformAdmin = {
   id: string // platform_admins.id
@@ -31,7 +32,11 @@ export async function getPlatformAdmin(): Promise<PlatformAdmin | null> {
     .maybeSingle()
 
   if (error) {
-    console.error('[platform-admin] lookup failed:', error)
+    captureWithContext(new Error(error.message), {
+      action: 'platform-admin/getPlatformAdmin',
+      user_id: user.id,
+      supabase_code: error.code,
+    })
     return null
   }
 

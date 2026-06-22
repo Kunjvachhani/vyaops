@@ -19,6 +19,7 @@ import type {
   OnboardingDictResult,
   NewDialectMapping,
 } from '@/types/ai';
+import { captureWithContext } from '@/lib/utils/sentry';
 import {
   CorrectionAnalysisSchema,
   OnboardingDictResultSchema,
@@ -83,7 +84,7 @@ RESPONSE FORMAT (strict JSON):
       reasoning: validated.reasoning,
     };
   } catch (error) {
-    console.error('[dialect-learner] analyzeCorrection failed:', error);
+    captureWithContext(error, { action: 'dialect-learner/analyzeCorrection' })
     // Safety default: not a dialect issue (don't learn from failed analysis)
     return {
       is_dialect_issue: false,
@@ -322,7 +323,7 @@ RESPONSE FORMAT (strict JSON):
     const parsed = JSON.parse(response.content);
     return OnboardingDictResultSchema.parse(parsed);
   } catch (error) {
-    console.error('[dialect-learner] generateOnboardingDictionary failed:', error);
+    captureWithContext(error, { action: 'dialect-learner/generateOnboardingDictionary' })
     return { products: [], customers: [] };
   }
 }

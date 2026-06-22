@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { getCurrentUser } from '@/lib/supabase/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { logAudit } from '@/lib/utils/audit'
+import { captureWithContext } from '@/lib/utils/sentry'
 import type { Database } from '@/types/database'
 
 type OrganizationUpdate = Database['public']['Tables']['organizations']['Update']
@@ -51,7 +52,7 @@ export async function updateProactivePreference(
     .is('deleted_at', null)
 
   if (updateError) {
-    console.error('[settings/updateProactivePreference]', updateError)
+    captureWithContext(updateError, { action: 'settings/updateProactivePreference', org_id: user.org_id, user_role: user.role })
     return { ok: false, error: 'update_failed' }
   }
 

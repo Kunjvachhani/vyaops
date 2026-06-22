@@ -4,6 +4,7 @@ import { adminClient } from '@/lib/supabase/admin'
 import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import type { Database } from '@/types/database'
 import { logAudit } from '@/lib/utils/audit'
+import { captureWithContext } from '@/lib/utils/sentry'
 import { computeGst, isIntrastate } from '@/lib/utils/gst'
 import { createInvoiceSchema } from '@/lib/validations/invoice'
 
@@ -100,7 +101,7 @@ export async function GET(req: NextRequest) {
   const { data: invoicesRaw, error, count } = await query
 
   if (error) {
-    console.error('[GET /api/invoices]', error)
+    captureWithContext(error, { action: 'GET /api/invoices', org_id: user.org_id, user_role: user.role })
     return NextResponse.json(
       { error: 'Failed to fetch invoices', code: 'DB_ERROR' },
       { status: 500 }
@@ -271,7 +272,7 @@ export async function POST(req: NextRequest) {
     'generate_invoice_number'
   )
   if (seqErr || !invoiceNumber) {
-    console.error('[POST /api/invoices] generate_invoice_number rpc failed', seqErr)
+    captureWithContext(seqErr ?? new Error('generate_invoice_number returned null'), { action: 'POST /api/invoices/seq', org_id: user.org_id, user_role: user.role })
     return NextResponse.json(
       { error: 'Failed to generate invoice number', code: 'SEQ_ERROR' },
       { status: 500 }
@@ -298,7 +299,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (insertErr || !createdRaw) {
-    console.error('[POST /api/invoices] insert failed', insertErr)
+    captureWithContext(insertErr ?? new Error('insert returned null'), { action: 'POST /api/invoices', org_id: user.org_id, user_role: user.role })
     return NextResponse.json(
       { error: 'Failed to create invoice', code: 'DB_ERROR' },
       { status: 500 }

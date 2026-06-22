@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { adminClient } from '@/lib/supabase/admin'
 import { requireInternalAuth } from '@/lib/utils/internal-auth'
+import { captureWithContext } from '@/lib/utils/sentry'
 import { matchCustomer, matchProduct } from '@/lib/utils/fuzzy-match'
 import type { Database } from '@/types/database'
 
@@ -252,7 +253,7 @@ export async function POST(request: NextRequest) {
       }
     }
   } catch (err) {
-    console.error('[ai/clarify] error building clarification:', err instanceof Error ? err.message : String(err))
+    captureWithContext(err, { action: 'POST /api/ai/clarify' })
     message = {
       to: sender,
       type: 'text',

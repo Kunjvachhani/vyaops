@@ -2,11 +2,11 @@ import { after } from 'next/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireInternalAuth } from '@/lib/utils/internal-auth'
+import { captureWithContext } from '@/lib/utils/sentry'
 import { handleCustomerMessage, handleOwnerEcho } from '@/lib/whatsapp/flow-engine'
 
 // Internal-auth endpoint called by n8n for both customer messages and owner echoes.
 // n8n branches on messageType: 'customer_text' | 'owner_echo'.
-// Errors are logged to Sentry via console; never surfaced to the customer chat (Rule A).
 
 const BaseCustomerSchema = z.object({
   message: z.string(),
@@ -70,10 +70,10 @@ export async function POST(request: NextRequest) {
         )
       }
     } catch (err) {
-      console.error('[flow] unhandled error:', {
-        messageType: data.messageType,
-        orgId: data.orgId,
-        error: err instanceof Error ? err.message : String(err),
+      captureWithContext(err, {
+        action: 'whatsapp/flow',
+        org_id: data.orgId,
+        message_type: data.messageType,
       })
     }
   })

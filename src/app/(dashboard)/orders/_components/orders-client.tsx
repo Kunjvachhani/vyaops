@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { captureWithContext } from '@/lib/utils/sentry'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -139,7 +140,7 @@ export function OrdersClient({ canDelete = false }: { canDelete?: boolean }) {
           setPagination(json.pagination)
         }
       })
-      .catch(console.error)
+      .catch((e: unknown) => captureWithContext(e, { action: 'orders-client/fetch' }))
       .finally(() => setLoading(false))
   }, [])
 

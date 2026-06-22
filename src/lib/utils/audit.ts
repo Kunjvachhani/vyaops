@@ -1,4 +1,5 @@
 import { adminClient } from '@/lib/supabase/admin'
+import { captureWithContext } from '@/lib/utils/sentry'
 import type { Json } from '@/types/database'
 
 export type AuditAction =
@@ -106,11 +107,11 @@ export async function logAudit(entry: AuditEntry): Promise<void> {
   })
 
   if (error) {
-    // Wire to Sentry.captureException once @sentry/nextjs is installed.
-    console.error('[audit] Failed to write audit_log entry', {
-      supabaseError: error,
+    captureWithContext(new Error(error.message), {
+      action: 'audit/logAudit',
       entity_type: entry.entity_type,
-      action: entry.action,
+      audit_action: entry.action,
+      supabase_code: error.code,
     })
   }
 }

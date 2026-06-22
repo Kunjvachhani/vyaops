@@ -2,6 +2,7 @@ import { after } from 'next/server'
 import { NextRequest } from 'next/server'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { adminClient } from '@/lib/supabase/admin'
+import { captureWithContext } from '@/lib/utils/sentry'
 import { normalizePhone } from '@/lib/utils/phone'
 import type {
   MetaWebhookPayload,
@@ -122,7 +123,7 @@ async function forwardToN8n(payload: Record<string, unknown>): Promise<void> {
       body: JSON.stringify(payload),
     })
   } catch (err) {
-    console.error('[whatsapp] failed to forward to n8n:', err instanceof Error ? err.message : String(err))
+    captureWithContext(err, { action: 'whatsapp-webhook/forwardToN8n' })
   }
 }
 
@@ -191,10 +192,10 @@ async function processCustomerMessage(
     })
 
     if (insertError) {
-      console.error('[whatsapp] failed to log customer message:', {
-        error: insertError.message,
+      captureWithContext(new Error(insertError.message), {
+        action: 'whatsapp-webhook/logCustomerMessage',
         org_id: orgId,
-        phone: maskedPhone,
+        supabase_code: insertError.code,
       })
     }
 
@@ -222,10 +223,7 @@ async function processCustomerMessage(
       type: shape.messageType,
     })
   } catch (err) {
-    console.error('[whatsapp] error processing customer message:', {
-      phone: maskedPhone,
-      error: err instanceof Error ? err.message : String(err),
-    })
+    captureWithContext(err, { action: 'whatsapp-webhook/processCustomerMessage', org_id: orgId })
   }
 }
 
@@ -273,10 +271,10 @@ async function processEcho(
     })
 
     if (insertError) {
-      console.error('[whatsapp] failed to log echo:', {
-        error: insertError.message,
+      captureWithContext(new Error(insertError.message), {
+        action: 'whatsapp-webhook/logEcho',
         org_id: orgId,
-        chat: maskedChat,
+        supabase_code: insertError.code,
       })
     }
 
@@ -291,10 +289,7 @@ async function processEcho(
 
     console.log('[whatsapp] owner echo forwarded:', maskedChat, { org_id: orgId, isCommand })
   } catch (err) {
-    console.error('[whatsapp] error processing echo:', {
-      chat: maskedChat,
-      error: err instanceof Error ? err.message : String(err),
-    })
+    captureWithContext(err, { action: 'whatsapp-webhook/processEcho', org_id: orgId })
   }
 }
 
@@ -387,7 +382,9 @@ export async function POST(request: NextRequest): Promise<Response> {
     const tokenOk = !hmacOk && verifyUrlToken(request)
 
     if (!hmacOk && !tokenOk) {
-      console.error('[whatsapp] webhook authentication failed (HMAC + URL token) — rejecting')
+      captureWithContext(new Error('Webhook authentication failed (HMAC + URL token)'), {
+        action: 'whatsapp-webhook/auth',
+      })
       return new Response('Unauthorized', { status: 401 })
     }
 

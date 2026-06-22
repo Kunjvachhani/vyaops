@@ -3,6 +3,7 @@ import { adminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/supabase/server'
 import type { Database } from '@/types/database'
 import { InvoiceRenderError, renderInvoice } from '@/lib/invoices/render'
+import { captureWithContext } from '@/lib/utils/sentry'
 import { sendRawMessage } from '@/lib/whatsapp/meta-cloud-api'
 import { paiseToInvoiceAmount } from '@/lib/utils/currency'
 import { formatISTDate } from '@/lib/utils/date'
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       const status = err.code === 'NOT_FOUND' ? 404 : err.code === 'DATA_INTEGRITY_ERROR' ? 422 : 500
       return NextResponse.json({ error: err.message, code: err.code }, { status })
     }
-    console.error('[POST /api/invoices/[id]/send-whatsapp] render', err)
+    captureWithContext(err, { action: 'POST /api/invoices/[id]/send-whatsapp/render', org_id: user.org_id, user_role: user.role })
     return NextResponse.json(
       { error: 'Failed to prepare invoice PDF', code: 'PDF_GENERATION_ERROR' },
       { status: 500 }
@@ -113,7 +114,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   if (updateErr || !updatedRaw) {
     // The message was sent; only the bookkeeping update failed. Report success
     // with a warning so the owner isn't told the send failed.
-    console.error('[POST /api/invoices/[id]/send-whatsapp] post-send update failed', updateErr)
+    captureWithContext(updateErr ?? new Error('post-send status update returned null'), { action: 'POST /api/invoices/[id]/send-whatsapp/update', org_id: user.org_id, user_role: user.role })
     return NextResponse.json({ sent: true, messageId: result.messageId, warning: 'STATE_UPDATE_FAILED' })
   }
 
