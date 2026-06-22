@@ -16,6 +16,32 @@
 
 ---
 
+## ⚠️ S5 SECURITY INVARIANTS — every new sprint/prompt MUST follow these
+
+> Added after the S5 Security-Hardening + Platform-Admin work (2026-06-22). These override any
+> older instruction below that conflicts. Paste this block into Claude Code when building any new
+> feature that touches the DB, auth, or admin surface.
+
+1. **Auth claims live in `app_metadata`, never `user_metadata`.** Read `org_id`/`role` via
+   `getCurrentUser()` (server), the middleware helper, or RLS `_current_role()`/`_current_org_id()`.
+   Stamp them ONLY with `adminClient.auth.admin.updateUserById()` (service-role) — never from the client.
+2. **New tables get role-checked RLS through the helpers.** SELECT = org-scoped only
+   (`organization_id = _current_org_id() AND deleted_at IS NULL`); INSERT/UPDATE add
+   `AND _current_role() IN (...)`. One policy per command (Postgres OR's permissive policies — don't layer).
+   No DELETE policy. See `docs/security/RLS_POLICIES.md`.
+3. **Never hard delete.** Use `src/lib/utils/soft-delete.ts` (`softDelete`/`restore`); every query filters
+   `deleted_at IS NULL`; every mutation writes `audit_log`. Reuse `DeleteButton` + the undo toast for UI.
+4. **Admin/cross-org work goes through the platform-admin plane.** Gate with `getPlatformAdmin()`
+   (authoritative) + `app_metadata.is_platform_admin` (middleware fast path). Non-admins REDIRECT to
+   `/dashboard` (not 403). Cross-org actions require an explicit `org_id` and audit with source `platform_admin`.
+   NEVER gate platform access on a tenant role (`owner` etc.).
+5. **Service-role only:** `platform_admins`, `audit_log`, `whatsapp_*`, `*_dictionary`. Service-role key
+   stays in `src/lib/supabase/admin.ts` — never the browser.
+6. **After any change, update the docs first** (CLAUDE.md + the relevant `docs/**`), then the code —
+   and keep this playbook's affected prompts in sync.
+
+---
+
 ## MASTER PROGRESS TRACKER
 
 Use this to see where you are at a glance. Check off each item as you complete it.
@@ -79,11 +105,18 @@ Use this to see where you are at a glance. Check off each item as you complete i
 - [ ] S4.3c — Dialect Dictionary: Lookup module (src/lib/ai/dialect-lookup.ts)
 - [ ] S4.3d — Dialect Dictionary: Learning module (src/lib/ai/dialect-learner.ts)
 - [ ] S4.3e — Dialect Dictionary: Seed industry_dictionary with 50 MSME segments
-- [ ] S4.4 — Soft delete across all tables
-- [ ] S4.5 — Destructive action confirmations (WhatsApp + web)
+- [x] S4.4 — Soft delete across all tables (DONE: soft-delete.ts, DELETE handlers, /api/admin/{deleted,restore}, undo toast, DeleteButton)
+- [ ] S4.5 — Destructive action confirmations (WhatsApp + web) — web side partly done via DeleteButton confirm dialog (S4.4); WhatsApp YES-confirm still pending
 - [ ] S4.6 — Idempotency checks for orders
 - [ ] S4.7 — Sentry error monitoring live
 - [ ] S4.8 — CSV data export
+
+### S5 (out-of-band): Security Hardening + Platform Admin — DONE 2026-06-22
+> Ran from `prompts/S5-security-hardening-platform-admin.md` (NOT the same as Sprint 5 below).
+- [x] Auth claims moved user_metadata → **app_metadata** (signup, getCurrentUser, middleware; data migration)
+- [x] Role-based RLS reads app_metadata via `_current_role()`/`_current_org_id()` helpers
+- [x] `platform_admins` table (RLS, no policies) + `getPlatformAdmin()` + `(admin)` gate + cross-org recovery
+- [x] `/api/admin/{deleted,restore}` widened for cross-org platform admins; audit source `platform_admin`
 
 ### Sprint 5: Production + Inventory + Vendors (Weeks 9–10)
 - [ ] S5.1 — Production batch logging via WhatsApp
@@ -341,14 +374,20 @@ This migration must:
 1. Enable RLS on EVERY table EXCEPT audit_log and whatsapp_messages
    (those are write-only system tables, accessed via service-role)
 
+> **⚠️ S5 SECURITY-HARDENING AMENDMENT (2026-06-22):** The claim path below was superseded.
+> `org_id`/`role` now live in **`app_metadata`** (not user-editable), read through the
+> `_current_role()` / `_current_org_id()` helper functions which `COALESCE(app_metadata,
+> user_metadata)` during the migration window. Use the helpers in policies, not a raw
+> `auth.jwt()` path. See `docs/security/RLS_POLICIES.md` and migration `20260622000002_role_based_rls.sql`.
+
 2. For each RLS-enabled table, create these policies:
 
    SELECT policy — "Users can only read their own org's data":
-   - Check: organization_id = (auth.jwt() ->> 'org_id')::uuid
+   - Check: organization_id = _current_org_id()    -- helper: app_metadata→user_metadata fallback
    - Also check: deleted_at IS NULL (never show soft-deleted records)
 
-   INSERT policy — "Users can only insert into their own org":
-   - Check: organization_id = (auth.jwt() ->> 'org_id')::uuid
+   INSERT policy — "Users can only insert into their own org" (+ role check on writes):
+   - Check: organization_id = _current_org_id() AND _current_role() IN ('owner','manager')
 
    UPDATE policy — role-based:
    - Workers: can ONLY update production_batches
@@ -460,7 +499,9 @@ Build the complete authentication system using Supabase Auth.
      a. Create Supabase auth user
      b. Create organization record in organizations table
      c. Create user record in users table with role: "owner"
-     d. Store org_id and role in user_metadata
+     d. Store org_id and role in app_metadata via adminClient.auth.admin.updateUserById()
+        (mirror into user_metadata too during the S5 transition window). NEVER let the
+        client set role — app_metadata is service-role-only, so users can't self-promote.
    - Redirect to /dashboard on success
    - Zod validation on all fields
 
@@ -2348,6 +2389,14 @@ git push
 
 ### S4.4 — Soft Delete System (1–2 hours)
 
+> **✅ DONE (2026-06-22).** Built ahead of sprint order: `src/lib/utils/soft-delete.ts`
+> (`softDelete`/`restore` + org verification + audit), DELETE handlers on orders/customers/
+> invoices `[id]` routes, `GET /api/admin/deleted` + `POST /api/admin/restore`, the 30s "Undo"
+> toast (`src/lib/hooks/use-undoable-delete.ts` + `<Toaster>` in the dashboard shell), and a
+> reusable `DeleteButton` wired into the order/customer/invoice detail dialogs. S5 hardening then
+> widened the admin routes for cross-org platform-admin recovery. The original prompt is kept
+> below for reference.
+
 **PROMPT:**
 ```
 Read CLAUDE.md security rule #2: "NEVER hard delete any record."
@@ -2399,6 +2448,12 @@ git push
 ---
 
 ### S4.5 — Destructive Action Confirmations (1–2 hours)
+
+> **⚠️ S5 AMENDMENT (2026-06-22):** The WEB side is partly built. `DeleteButton`
+> (`src/components/shared/delete-button.tsx`) already shows a confirm dialog + 30s undo and is
+> wired into the order/customer/invoice detail dialogs. Build the remaining pieces ON TOP of it
+> (typed-name confirmation for extra-dangerous actions, status-backward warnings). The WhatsApp
+> "reply YES to confirm" flow is still unbuilt — that is the main outstanding part of S4.5.
 
 **PROMPT:**
 ```
@@ -3541,18 +3596,29 @@ git push
 
 ### S8.2 — Admin Dashboard (2 hours)
 
+> **⚠️ S5 AMENDMENT (2026-06-22): the admin AUTH MODEL is already built — do NOT rebuild it.**
+> - Access is NOT "your email + 403". It is the `platform_admins` table (RLS enabled, no policies →
+>   service-role only) checked by `getPlatformAdmin()` (`src/lib/supabase/platform-admin.ts`).
+> - The `(admin)` route group is gated in `src/middleware.ts` via the `app_metadata.is_platform_admin`
+>   fast path, and authoritatively re-checked in `src/app/(admin)/layout.tsx`. Non-admins are
+>   **REDIRECTED to /dashboard** (not shown a 403).
+> - `src/app/(admin)/admin/page.tsx` already renders org/user counts + recent audit; `/admin/recovery`
+>   does cross-org soft-delete recovery. **S8.2's job is now ADDITIVE**: add the revenue/MRR, system-health,
+>   and per-tier widgets below onto the existing admin shell. Add new platform admins by inserting into
+>   `platform_admins` + stamping `app_metadata.is_platform_admin` (see migration `20260622000003`).
+> - Update the VERIFY step: "regular email → /admin" should **redirect to /dashboard**, not return 403.
+
 **PROMPT:**
 ```
-Build the internal admin dashboard at src/app/(admin)/.
+Extend the existing internal admin dashboard at src/app/(admin)/ (auth + recovery already built in S5).
 
 This is for YOUR team to monitor all customers, not visible to factory owners.
 
-src/app/(admin)/page.tsx:
+Add to src/app/(admin)/admin/page.tsx (keep the existing platform-admin gate + recovery link):
 
 1. Admin-only access:
-   - Create an "admin" role check in middleware
-   - Your personal email(s) get admin access
-   - All other users → 403
+   - ALREADY DONE — getPlatformAdmin() gate in (admin)/layout.tsx + middleware is_platform_admin.
+   - Do NOT add an email-based check or a 403; non-admins redirect to /dashboard.
 
 2. Customer overview:
    - Table: Org Name, Owner, Tier, Created Date, Last Active, Orders Count, ₹ Saved
@@ -3580,8 +3646,8 @@ src/app/(admin)/page.tsx:
 **VERIFY:**
 ```bash
 npm run dev
-# Login with admin email → /admin should load
-# Login with regular email → /admin should show 403
+# Login as a seeded platform admin (row in platform_admins + app_metadata.is_platform_admin) → /admin loads
+# Login as a regular org owner → /admin REDIRECTS to /dashboard (not a 403)
 ```
 
 **COMMIT:**
@@ -3763,6 +3829,11 @@ Run a comprehensive security audit and fix all issues.
    - Test: org_dictionary RLS — org A can't see org B's dictionary entries
    - Test: industry_dictionary + global_dictionary — authenticated can SELECT, cannot INSERT/UPDATE
    - Test: anon key cannot write to any dictionary table
+   - (S5) Test: a user CANNOT self-promote — supabase.auth.updateUser({ data:{ role:'owner' }})
+     from the browser must NOT change effective role (getCurrentUser/RLS read app_metadata, not user_metadata)
+   - (S5) Test: platform_admins is unreadable/unwritable via anon/authenticated keys (RLS, no policies)
+   - (S5) Test: a non-platform-admin hitting /admin redirects to /dashboard; only platform_admins reach it
+   - (S5) Test: cross-org restore via /api/admin/restore requires getPlatformAdmin() and logs source 'platform_admin'
 
 2. Webhook security:
    - WhatsApp webhook: signature verification is enforced (reject invalid signatures)

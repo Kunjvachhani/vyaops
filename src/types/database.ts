@@ -1137,6 +1137,33 @@ export type Database = {
           },
         ]
       }
+      platform_admins: {
+        Row: {
+          added_by: string | null
+          created_at: string
+          id: string
+          label: string
+          revoked_at: string | null
+          user_id: string
+        }
+        Insert: {
+          added_by?: string | null
+          created_at?: string
+          id?: string
+          label?: string
+          revoked_at?: string | null
+          user_id: string
+        }
+        Update: {
+          added_by?: string | null
+          created_at?: string
+          id?: string
+          label?: string
+          revoked_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       production_batches: {
         Row: {
           batch_number: string

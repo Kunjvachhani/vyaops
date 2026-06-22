@@ -410,6 +410,14 @@ async function buildDraftForPending(pending: PendingOrderRow, orgId: string, loc
   return null
 }
 
+// "YES" / "हा" / "હા" in any capitalisation — the only accepted explicit
+// confirmation for destructive cancel actions (CANCEL_ORDER). "ok" is
+// intentionally excluded because it is too casual for an irreversible action.
+function isExplicitYes(reply: string): boolean {
+  const t = reply.trim().toLowerCase()
+  return t === 'yes' || t === 'हा' || t === 'હા' || t === 'हाँ' || t === 'han'
+}
+
 async function handleEchoForDraftPosted(
   orgId: string,
   chatPhone: string,
@@ -417,6 +425,20 @@ async function handleEchoForDraftPosted(
   ownerReply: string,
   _messageId: string
 ): Promise<void> {
+  // For cancellation drafts, require explicit YES / हा / હા — "ok" is not enough.
+  if (pending.intent === 'CANCEL_ORDER' && !isExplicitYes(ownerReply)) {
+    const parsed = await parseConfirmation(ownerReply, currentISTDateString())
+    if (parsed.cancel) {
+      await adminClient
+        .from('pending_orders')
+        .update({ state: 'cancelled' })
+        .eq('id', pending.id)
+      console.log('[flow-engine] owner /cancel on cancel draft — pending cancelled:', pending.id)
+    }
+    // "ok" or anything other than explicit YES — stay in draft_posted, keep waiting
+    return
+  }
+
   const parsed = await parseConfirmation(ownerReply, currentISTDateString())
 
   if (parsed.cancel) {

@@ -318,7 +318,7 @@ table_name          TEXT NOT NULL
 record_id           UUID NOT NULL
 action              TEXT NOT NULL                    -- CREATE | UPDATE | SOFT_DELETE | RESTORE
 changed_by          UUID                             -- user ID or NULL for system/bot
-changed_by_source   TEXT NOT NULL                    -- whatsapp | web | api | scheduled | system
+changed_by_source   TEXT NOT NULL                    -- whatsapp | web | api | scheduled | system | platform_admin
 old_values          JSONB                            -- previous state (NULL for CREATE)
 new_values          JSONB                            -- new state (NULL for SOFT_DELETE)
 ip_address          TEXT
@@ -493,6 +493,24 @@ updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 **Unique:** `UNIQUE(term_normalized, canonical) WHERE is_active = TRUE`
 **Index:** `(confidence DESC)` for ranked lookups.
 **RLS:** DISABLED. Read-only for authenticated users. Writes via service-role only.
+
+## TABLE: platform_admins
+VyaOps platform maintainers (founders/support). A separate cross-org auth plane — NOT org-scoped.
+This is a `system_*`-style table: it has NO `organization_id` and NO `updated_at`/`deleted_at`
+(revocation is via `revoked_at`, not the soft-delete contract).
+```
+id           UUID PK DEFAULT gen_random_uuid()
+user_id      UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE
+label        TEXT NOT NULL DEFAULT ''         -- human note, e.g. "Kunj — founder"
+added_by     UUID REFERENCES auth.users(id)   -- NULL for the seed row
+created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+revoked_at   TIMESTAMPTZ                       -- soft-revoke (preserve audit trail)
+```
+**Unique:** `UNIQUE(user_id)`
+**RLS:** ENABLED with NO policies → service-role only (anon/authenticated have zero access).
+Membership check: `getPlatformAdmin()` (`src/lib/supabase/platform-admin.ts`) via service-role.
+Fast path: `app_metadata.is_platform_admin = true` stamped on the auth user (gates `/admin` in middleware).
+Seed the first row manually after signup (see migration `20260622000003_create_platform_admins.sql`).
 
 ## RELATIONSHIP DIAGRAM
 ```

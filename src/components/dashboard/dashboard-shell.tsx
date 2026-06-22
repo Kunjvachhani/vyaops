@@ -21,6 +21,7 @@ import {
   LogOut,
   ChevronDown,
 } from 'lucide-react'
+import { Toaster } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { LanguageSwitcher } from '@/components/shared/language-switcher'
 import { signOutAction } from '@/app/(dashboard)/actions'
@@ -232,6 +233,9 @@ export function DashboardShell({ orgName, orgTier, userEmail, children }: Props)
         {/* Page content */}
         <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
       </div>
+
+      {/* Toasts (incl. undo-delete). Large tap targets for factory-floor phones. */}
+      <Toaster position="bottom-center" richColors closeButton toastOptions={{ duration: 5000 }} />
     </div>
   )
 }

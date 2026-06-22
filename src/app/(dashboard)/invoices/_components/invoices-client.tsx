@@ -76,7 +76,7 @@ interface Summary {
   unpaidCount: number
 }
 
-export function InvoicesClient() {
+export function InvoicesClient({ canDelete = false }: { canDelete?: boolean }) {
   const t = useTranslations('pages.invoices')
   const tc = useTranslations('common')
 
@@ -583,6 +583,7 @@ export function InvoicesClient() {
         invoiceId={selectedInvoiceId}
         onOpenChange={(open) => !open && setSelectedInvoiceId(null)}
         onUpdated={refresh}
+        canDelete={canDelete}
       />
     </div>
   )

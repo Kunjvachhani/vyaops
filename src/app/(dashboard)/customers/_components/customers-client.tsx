@@ -38,7 +38,7 @@ interface Pagination {
   pages: number
 }
 
-export function CustomersClient() {
+export function CustomersClient({ canDelete = false }: { canDelete?: boolean }) {
   const t = useTranslations()
   const [customers, setCustomers] = useState<CustomerRow[]>([])
   const [pagination, setPagination] = useState<Pagination>({
@@ -273,6 +273,7 @@ export function CustomersClient() {
         customerId={selectedId}
         onOpenChange={(open) => !open && setSelectedId(null)}
         onUpdated={refresh}
+        canDelete={canDelete}
       />
     </div>
   )

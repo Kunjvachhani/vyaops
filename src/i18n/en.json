@@ -155,7 +155,11 @@
         "date": "Date",
         "status": "Status",
         "by": "via",
-        "viewInvoice": "View Invoice"
+        "viewInvoice": "View Invoice",
+        "backwardStatusTitle": "Change Status?",
+        "backwardStatusDesc": "Going back to \"{status}\" may reset production data.",
+        "backwardStatusConfirm": "Change Status",
+        "revertTo": "Revert to {status}"
       }
     },
     "invoices": {
@@ -232,6 +236,7 @@
         "recordPayment": "Record Payment",
         "markSent": "Mark as Sent",
         "cancelInvoice": "Cancel Invoice",
+        "cancelInvoiceHint": "This will cancel invoice {number}. The invoice will be marked cancelled and no further payments can be recorded.",
         "paymentHistory": "Payment History",
         "noPayments": "No payments recorded yet.",
         "auditTrail": "Audit Trail",
@@ -400,5 +405,60 @@
   "upsell": {
     "available": "Available on {tier} plan",
     "upgrade": "Upgrade to unlock"
+  },
+  "softDelete": {
+    "deleted": "Deleted.",
+    "undo": "Undo",
+    "restored": "Restored.",
+    "deleteFailed": "Could not delete. Please try again.",
+    "restoreFailed": "Could not undo. Please try again.",
+    "undoHint": "You can undo this for 30 seconds after deleting.",
+    "typeNameHint": "Type \"{label}\" to confirm"
+  },
+  "admin": {
+    "badge": "PLATFORM ADMIN",
+    "platformAdmin": "Platform admin",
+    "nav": {
+      "home": "Overview",
+      "recovery": "Recovery",
+      "exitToDashboard": "Exit to dashboard"
+    },
+    "home": {
+      "title": "Platform Overview",
+      "totalOrgs": "Organizations",
+      "totalUsers": "Users",
+      "recoveryCard": "Deleted records recovery",
+      "recoveryCardHint": "View and restore soft-deleted records across any org.",
+      "recentAudit": "Recent activity (last 50)",
+      "noAudit": "No audit entries yet.",
+      "col": {
+        "time": "Time",
+        "action": "Action",
+        "table": "Table",
+        "source": "Source",
+        "org": "Org"
+      }
+    },
+    "recovery": {
+      "title": "Deleted Records Recovery",
+      "description": "Select an organization and a table to view its soft-deleted records, then restore any of them. Restores are logged with source platform_admin.",
+      "org": "Organization",
+      "selectOrg": "Select an organization…",
+      "table": "Table",
+      "load": "Load",
+      "loading": "Loading…",
+      "loadFailed": "Could not load deleted records.",
+      "empty": "No deleted records found.",
+      "restore": "Restore",
+      "restoring": "Restoring…",
+      "restored": "Record restored.",
+      "restoreFailed": "Could not restore the record.",
+      "col": {
+        "record": "Record",
+        "id": "ID",
+        "deletedAt": "Deleted at",
+        "action": "Action"
+      }
+    }
   }
 }

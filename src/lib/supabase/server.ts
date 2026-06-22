@@ -40,7 +40,11 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 
   if (error || !user) return null
 
-  const meta = user.user_metadata as Record<string, string> | undefined
+  // org_id + role live in app_metadata (service-role-only, not user-editable). Fall back to
+  // user_metadata for users whose JWT predates the S5 app_metadata migration.
+  const appMeta = user.app_metadata as Record<string, string> | undefined
+  const userMeta = user.user_metadata as Record<string, string> | undefined
+  const meta = appMeta?.org_id ? appMeta : userMeta
   const org_id = meta?.org_id
   const role = meta?.role as AuthUser['role'] | undefined
 

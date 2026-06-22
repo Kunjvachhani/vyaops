@@ -5,6 +5,8 @@ import { useTranslations } from 'next-intl'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -19,6 +21,7 @@ import {
 } from '@/components/ui/table'
 import { CreateInvoiceDialog } from '@/app/(dashboard)/invoices/_components/create-invoice-dialog'
 import { InvoiceDetailDialog } from '@/app/(dashboard)/invoices/_components/invoice-detail-dialog'
+import { DeleteButton } from '@/components/shared/delete-button'
 import { paiseToCurrency } from '@/lib/utils/currency'
 import { formatISTDate, formatIST } from '@/lib/utils/date'
 import type { Json } from '@/types/database'
@@ -89,9 +92,10 @@ interface OrderDetailDialogProps {
   orderId: string | null
   onOpenChange: (open: boolean) => void
   onUpdated: () => void
+  canDelete?: boolean
 }
 
-export function OrderDetailDialog({ orderId, onOpenChange, onUpdated }: OrderDetailDialogProps) {
+export function OrderDetailDialog({ orderId, onOpenChange, onUpdated, canDelete = false }: OrderDetailDialogProps) {
   const t = useTranslations('pages.orders')
   const tc = useTranslations('common')
 
@@ -100,6 +104,7 @@ export function OrderDetailDialog({ orderId, onOpenChange, onUpdated }: OrderDet
   const [loading, setLoading] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [actionError, setActionError] = useState('')
+  const [revertTarget, setRevertTarget] = useState<OrderStatus | null>(null)
 
   // Invoice linkage: id of an existing (non-cancelled) invoice for this order, if any.
   const [existingInvoiceId, setExistingInvoiceId] = useState<string | null>(null)
@@ -338,14 +343,24 @@ export function OrderDetailDialog({ orderId, onOpenChange, onUpdated }: OrderDet
                 </Button>
               )}
               {order.status === 'confirmed' && (
-                <Button size="sm" onClick={() => updateStatus('in_production')} disabled={updating}>
-                  {updating ? t('detail.updating') : t('detail.startProduction')}
-                </Button>
+                <>
+                  <Button size="sm" onClick={() => updateStatus('in_production')} disabled={updating}>
+                    {updating ? t('detail.updating') : t('detail.startProduction')}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setRevertTarget('draft')} disabled={updating}>
+                    {t('detail.revertTo', { status: statusLabel('draft') })}
+                  </Button>
+                </>
               )}
               {order.status === 'in_production' && (
-                <Button size="sm" onClick={() => updateStatus('completed')} disabled={updating}>
-                  {updating ? t('detail.updating') : t('detail.markComplete')}
-                </Button>
+                <>
+                  <Button size="sm" onClick={() => updateStatus('completed')} disabled={updating}>
+                    {updating ? t('detail.updating') : t('detail.markComplete')}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setRevertTarget('confirmed')} disabled={updating}>
+                    {t('detail.revertTo', { status: statusLabel('confirmed') })}
+                  </Button>
+                </>
               )}
               {order.status === 'completed' && (
                 <>
@@ -369,9 +384,53 @@ export function OrderDetailDialog({ orderId, onOpenChange, onUpdated }: OrderDet
                   <Button size="sm" onClick={() => updateStatus('dispatched')} disabled={updating}>
                     {updating ? t('detail.updating') : t('detail.markDispatched')}
                   </Button>
+                  <Button size="sm" variant="outline" onClick={() => setRevertTarget('in_production')} disabled={updating}>
+                    {t('detail.revertTo', { status: statusLabel('in_production') })}
+                  </Button>
                 </>
               )}
+              {canDelete && (
+                <DeleteButton
+                  endpoint={`/api/orders/${order.id}`}
+                  table="orders"
+                  id={order.id}
+                  label={order.order_number}
+                  onChange={() => {
+                    onOpenChange(false)
+                    onUpdated()
+                  }}
+                />
+              )}
             </div>
+
+            {/* ── Backward-status warning dialog ── */}
+            <Dialog open={revertTarget !== null} onOpenChange={(v) => { if (!v) setRevertTarget(null) }}>
+              <DialogContent className="sm:max-w-[420px]">
+                <DialogHeader>
+                  <DialogTitle>{t('detail.backwardStatusTitle')}</DialogTitle>
+                  <DialogDescription>
+                    {t('detail.backwardStatusDesc', { status: revertTarget ? statusLabel(revertTarget) : '' })}
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setRevertTarget(null)} autoFocus>
+                    {tc('cancel')}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    disabled={updating}
+                    onClick={async () => {
+                      if (!revertTarget) return
+                      const target = revertTarget
+                      setRevertTarget(null)
+                      await updateStatus(target)
+                    }}
+                  >
+                    {t('detail.backwardStatusConfirm')}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
 
             {/* ── Audit Trail ── */}
             <div>

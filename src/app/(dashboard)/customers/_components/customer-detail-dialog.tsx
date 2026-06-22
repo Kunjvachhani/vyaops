@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { paiseToCurrency } from '@/lib/utils/currency'
+import { DeleteButton } from '@/components/shared/delete-button'
 import { Pencil, X } from 'lucide-react'
 
 type OrderStatus =
@@ -67,12 +68,14 @@ interface CustomerDetailDialogProps {
   customerId: string | null
   onOpenChange: (open: boolean) => void
   onUpdated: () => void
+  canDelete?: boolean
 }
 
 export function CustomerDetailDialog({
   customerId,
   onOpenChange,
   onUpdated,
+  canDelete = false,
 }: CustomerDetailDialogProps) {
   const t = useTranslations()
   const [detail, setDetail] = useState<CustomerDetail | null>(null)
@@ -333,6 +336,23 @@ export function CustomerDetailDialog({
                 </Table>
               )}
             </div>
+
+            {/* Danger zone */}
+            {canDelete && (
+              <div className="flex justify-end border-t pt-4">
+                <DeleteButton
+                  endpoint={`/api/customers/${detail.customer.id}`}
+                  table="customers"
+                  id={detail.customer.id}
+                  label={detail.customer.name}
+                  requireTypedName
+                  onChange={() => {
+                    onOpenChange(false)
+                    onUpdated()
+                  }}
+                />
+              </div>
+            )}
           </div>
         )}
 

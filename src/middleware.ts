@@ -37,7 +37,11 @@ export async function middleware(request: NextRequest) {
   // dashboard layout keys off org_id causes an infinite /login ⇄ /dashboard
   // redirect loop whenever the JWT is stale (e.g. right after signup, before
   // the session is refreshed).
-  const meta = user?.user_metadata as Record<string, unknown> | undefined
+  // org_id + role live in app_metadata (service-role-only). Fall back to user_metadata for
+  // JWTs issued before the S5 migration. (Same predicate getCurrentUser() + RLS helpers use.)
+  const appMeta = user?.app_metadata as Record<string, unknown> | undefined
+  const userMeta = user?.user_metadata as Record<string, unknown> | undefined
+  const meta = appMeta?.org_id ? appMeta : userMeta
   const isAuthed = Boolean(user && meta?.org_id && meta?.role)
 
   const { pathname } = request.nextUrl
@@ -49,6 +53,17 @@ export async function middleware(request: NextRequest) {
 
   if (isAuthed && isPublic) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
+
+  // Platform-admin gate for the (admin) route group. Fast path only: trust the
+  // is_platform_admin flag in app_metadata (service-role-only, not user-editable) to avoid a
+  // DB round-trip in edge middleware. The (admin) layout calls getPlatformAdmin() as the
+  // authoritative DB check (defense in depth).
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+    const isPlatformAdmin = appMeta?.is_platform_admin === true
+    if (!isPlatformAdmin) {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
   }
 
   return response

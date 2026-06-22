@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -23,6 +24,7 @@ import {
 } from '@/components/ui/table'
 import { paiseToCurrency } from '@/lib/utils/currency'
 import { formatISTDate, formatIST } from '@/lib/utils/date'
+import { DeleteButton } from '@/components/shared/delete-button'
 import { Download, Send } from 'lucide-react'
 import type { Json } from '@/types/database'
 
@@ -96,9 +98,10 @@ interface InvoiceDetailDialogProps {
   invoiceId: string | null
   onOpenChange: (open: boolean) => void
   onUpdated: () => void
+  canDelete?: boolean
 }
 
-export function InvoiceDetailDialog({ invoiceId, onOpenChange, onUpdated }: InvoiceDetailDialogProps) {
+export function InvoiceDetailDialog({ invoiceId, onOpenChange, onUpdated, canDelete = false }: InvoiceDetailDialogProps) {
   const t = useTranslations('pages.invoices')
   const tc = useTranslations('common')
 
@@ -111,6 +114,7 @@ export function InvoiceDetailDialog({ invoiceId, onOpenChange, onUpdated }: Invo
   const [notice, setNotice] = useState('')
 
   // Record-payment sub-dialog
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
   const [payOpen, setPayOpen] = useState(false)
   const [payAmount, setPayAmount] = useState('')
   const [payDate, setPayDate] = useState('')
@@ -192,7 +196,7 @@ export function InvoiceDetailDialog({ invoiceId, onOpenChange, onUpdated }: Invo
   }
 
   async function cancelInvoice() {
-    if (!confirm(t('detail.cancelInvoice') + '?')) return
+    setCancelConfirmOpen(false)
     await patchInvoice({ status: 'cancelled' })
   }
 
@@ -444,11 +448,25 @@ export function InvoiceDetailDialog({ invoiceId, onOpenChange, onUpdated }: Invo
                   size="sm"
                   variant="outline"
                   className="text-destructive hover:text-destructive"
-                  onClick={cancelInvoice}
+                  onClick={() => setCancelConfirmOpen(true)}
                   disabled={busy}
                 >
                   {t('detail.cancelInvoice')}
                 </Button>
+              )}
+              {/* Delete is only offered for invoices with no recorded payments
+                  (the API rejects deleting paid / part-paid invoices). */}
+              {canDelete && invoice.paid_amount_paise === 0 && invoice.status !== 'paid' && (
+                <DeleteButton
+                  endpoint={`/api/invoices/${invoice.id}`}
+                  table="invoices"
+                  id={invoice.id}
+                  label={invoice.invoice_number}
+                  onChange={() => {
+                    onOpenChange(false)
+                    onUpdated()
+                  }}
+                />
               )}
             </div>
 
@@ -511,6 +529,26 @@ export function InvoiceDetailDialog({ invoiceId, onOpenChange, onUpdated }: Invo
             </div>
           </div>
         )}
+
+        {/* ── Cancel-invoice confirmation dialog ── */}
+        <Dialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
+          <DialogContent className="sm:max-w-[420px]">
+            <DialogHeader>
+              <DialogTitle>{t('detail.cancelInvoice')}</DialogTitle>
+              <DialogDescription>
+                {t('detail.cancelInvoiceHint', { number: invoice?.invoice_number ?? '' })}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCancelConfirmOpen(false)} autoFocus>
+                {tc('cancel')}
+              </Button>
+              <Button variant="destructive" onClick={cancelInvoice} disabled={busy}>
+                {t('detail.cancelInvoice')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* ── Record-payment sub-dialog ── */}
         <Dialog open={payOpen} onOpenChange={setPayOpen}>

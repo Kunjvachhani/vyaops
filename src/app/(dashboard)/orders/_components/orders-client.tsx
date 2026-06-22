@@ -78,7 +78,7 @@ interface Pagination {
   pages: number
 }
 
-export function OrdersClient() {
+export function OrdersClient({ canDelete = false }: { canDelete?: boolean }) {
   const t = useTranslations('pages.orders')
   const tc = useTranslations('common')
 
@@ -569,6 +569,7 @@ export function OrdersClient() {
         orderId={selectedOrderId}
         onOpenChange={(open) => !open && setSelectedOrderId(null)}
         onUpdated={refresh}
+        canDelete={canDelete}
       />
     </div>
   )

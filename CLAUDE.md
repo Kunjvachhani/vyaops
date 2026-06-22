@@ -139,6 +139,18 @@ npm run test:benchmark         # AI eval benchmark suite
     `global_dictionary` are read-only for authenticated users (via RLS SELECT policy on auth.role() = 'authenticated'),
     writes go through `adminClient` only. BEFORE GOING TO PRODUCTION: audit every query touching these
     tables and confirm none use the anon key for writes.
+12. **Auth claims (`org_id`, `role`) live in `app_metadata`, NOT `user_metadata`.** `user_metadata` is
+    self-editable by the user from the browser; `app_metadata` requires the service-role key, so users
+    cannot self-promote their role. Stamp it only via `adminClient.auth.admin.updateUserById()`.
+    `getCurrentUser()`, `middleware.ts`, and the RLS helpers (`_current_role()` / `_current_org_id()`)
+    read `app_metadata` with a `user_metadata` fallback during the migration window (the fallback is
+    removed once all users are re-stamped). Any future user-invite flow MUST set the invited user's
+    role in `app_metadata` server-side — never let the invited user choose their own role.
+13. **Platform admins** (VyaOps maintainers) are a separate cross-org plane in the `platform_admins`
+    table (RLS enabled, NO policies → service-role only). They are NOT org-scoped. The `(admin)` route
+    group is gated by `getPlatformAdmin()` (authoritative DB lookup) plus an `app_metadata.is_platform_admin`
+    fast path in middleware. Platform-admin mutations write `audit_log` with `changed_by_source = 'platform_admin'`.
+    NEVER gate platform-admin access on a tenant `role` (`owner` etc.) — tenants must never reach `/admin`.
 
 ---
 
