@@ -22,6 +22,37 @@ Customers message the owner's number naturally. Bot classifies silently; the own
 replies (captured as echoes via `smb_message_echoes` webhook field) drive the draft+ok
 confirmation loop. See WHATSAPP_COEXISTENCE.md and MESSAGE_PIPELINE.md for details.
 
+## Outbound Message Categories
+
+There are two fundamentally different kinds of outbound WhatsApp message. They are governed by
+different rules and must not be conflated.
+
+### 1. Autonomous bot messages (unchanged from the S2-R revised flow)
+The bot sends to a customer chat on its own initiative in exactly three cases — no others (this is
+Rule A, "Bot silence", in CLAUDE.md):
+1. **Order/modification/cancellation drafts** — posted after owner affirmation.
+2. **Confirmation messages** — sent after the owner types "ok".
+3. **`/status` summaries** — sent only when the owner types `/status` in that specific chat.
+
+No greetings, auto-replies, or "I didn't understand" messages. This list is closed.
+
+### 2. Owner-initiated dashboard sends (new — courier model)
+Distinct from autonomous behavior: the owner explicitly triggers a send from the web dashboard, and
+the bot acts purely as a **courier** relaying what the owner chose to send. Because the owner is
+driving the action (not the bot acting on its own), this does not fall under, or relax, the Rule A
+bot-silence list above.
+
+- **Currently:** the **"Send via WhatsApp"** button on an invoice (`POST /api/invoices/[id]/send-whatsapp`)
+  delivers the invoice PDF to the customer's number as a document message.
+- **Constraint — 24h customer-service window:** WhatsApp only permits free-form (non-template)
+  messages inside the 24-hour window opened by the customer's last inbound message. The current
+  implementation uses `sendRawMessage`, so it **only works inside that window**. Outside it, Meta
+  requires a pre-approved template.
+- **Future work (not blocking S3.7):** a template-based send path for out-of-window delivery. This
+  needs `TemplateParameter` (`src/types/whatsapp.ts`) extended to support a document header
+  parameter (`type: 'document'` with a `document: { link, filename }` object), which the current
+  text/payload-only shape cannot express.
+
 ## Production Planning Philosophy
 
 **Core principle:** Promised dates are owner-set, progress is observed — the system never auto-schedules.

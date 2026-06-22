@@ -37,11 +37,11 @@ holds only `APP_URL` + `INTERNAL_API_KEY` (workflow env), no Meta/DeepSeek keys.
 ### Scheduled (cron-based)
 | Workflow | Schedule | Action |
 |----------|----------|--------|
-| daily-morning-summary | 7:30 AM IST | Query open orders + plan → format → send |
-| daily-evening-summary | 7:00 PM IST | Query production + inventory → format → send |
-| payment-reminder | 9:00 AM IST | Query overdue invoices → send reminders |
-| low-stock-alert | 7:00 PM IST | Check inventory vs reorder level → alert |
-| compliance-reminder | 8:00 AM IST | Check upcoming deadlines → notify |
+| daily-order-summary    | 8:00 AM IST  | Query yesterday orders + today production + overdue → send template |
+| daily-evening-summary  | 7:00 PM IST  | Query production + inventory → send template |
+| payment-reminder       | 10:00 AM IST | Query overdue invoices → send tiered reminders |
+| low-stock-alert        | 7:00 PM IST  | Check inventory vs reorder level → alert |
+| compliance-reminder    | 8:00 AM IST  | Check upcoming deadlines → notify |
 
 ### Event-Triggered (database webhook)
 | Workflow | Trigger | Action |

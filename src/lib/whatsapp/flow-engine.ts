@@ -110,7 +110,7 @@ export async function handleCustomerMessage(
   if (!customerId) return   // Unknown sender — already handled by webhook (log only)
 
   // Build org context for AI
-  const [{ data: customers }, { data: products }, { data: vendors }] = await Promise.all([
+  const [{ data: customers }, { data: products }, { data: vendors }, { data: org }] = await Promise.all([
     adminClient
       .from('customers')
       .select('id, name, aliases')
@@ -126,10 +126,16 @@ export async function handleCustomerMessage(
       .select('id, name')
       .eq('organization_id', orgId)
       .is('deleted_at', null),
+    adminClient
+      .from('organizations')
+      .select('industry_config')
+      .eq('id', orgId)
+      .maybeSingle(),
   ])
 
   const orgContext = {
     orgId,
+    industrySegment: org?.industry_config ?? undefined,
     customers: (customers ?? []).map((c) => ({ id: c.id, name: c.name })),
     products: (products ?? []).map((p) => ({ id: p.id, name: p.name })),
     vendors: (vendors ?? []).map((v) => ({ id: v.id, name: v.name })),
@@ -404,6 +410,14 @@ async function buildDraftForPending(pending: PendingOrderRow, orgId: string, loc
   return null
 }
 
+// "YES" / "हा" / "હા" in any capitalisation — the only accepted explicit
+// confirmation for destructive cancel actions (CANCEL_ORDER). "ok" is
+// intentionally excluded because it is too casual for an irreversible action.
+function isExplicitYes(reply: string): boolean {
+  const t = reply.trim().toLowerCase()
+  return t === 'yes' || t === 'हा' || t === 'હા' || t === 'हाँ' || t === 'han'
+}
+
 async function handleEchoForDraftPosted(
   orgId: string,
   chatPhone: string,
@@ -411,6 +425,20 @@ async function handleEchoForDraftPosted(
   ownerReply: string,
   _messageId: string
 ): Promise<void> {
+  // For cancellation drafts, require explicit YES / हा / હા — "ok" is not enough.
+  if (pending.intent === 'CANCEL_ORDER' && !isExplicitYes(ownerReply)) {
+    const parsed = await parseConfirmation(ownerReply, currentISTDateString())
+    if (parsed.cancel) {
+      await adminClient
+        .from('pending_orders')
+        .update({ state: 'cancelled' })
+        .eq('id', pending.id)
+      console.log('[flow-engine] owner /cancel on cancel draft — pending cancelled:', pending.id)
+    }
+    // "ok" or anything other than explicit YES — stay in draft_posted, keep waiting
+    return
+  }
+
   const parsed = await parseConfirmation(ownerReply, currentISTDateString())
 
   if (parsed.cancel) {
@@ -497,6 +525,14 @@ async function executeNewOrder(
     .from('pending_orders')
     .update({ state: 'confirmed', confirmed_order_id: orderResult.orderId })
     .eq('id', pending.id)
+
+  if (orderResult.idempotent) {
+    // Same order was already created this hour — notify owner without re-confirming.
+    const dupText = getBotStrings(locale).duplicateOrder.notice(orderResult.orderNumber)
+    await sendTextMessage(chatPhone, dupText, orgId)
+    console.log('[flow-engine] NEW_ORDER idempotent — duplicate skipped:', orderResult.orderNumber)
+    return
+  }
 
   // Build and send confirmation (Rule A — this is one of the three allowed sends)
   const s = getBotStrings(locale).confirm
@@ -670,6 +706,56 @@ async function executeModifyOrder(
   console.log('[flow-engine] MODIFY_ORDER confirmed:', order.order_number, resolvedMode, resolvedQuantity)
 }
 
+// ─── Correction capture (S4.3 producer) ──────────────────────────────────────
+// When the owner corrects a mis-extracted draft via /edit, record the
+// (original customer message, wrong extraction, corrected extraction) triple in
+// the `corrections` table. This is the single producer that feeds BOTH downstream
+// loops — benchmark growth (scripts/corrections-to-benchmark.ts) and dialect
+// learning (analyzeCorrection/learnFromCorrection). Best-effort: a logging
+// failure must never break the owner's correction UX.
+async function recordCorrection(
+  orgId: string,
+  chatPhone: string,
+  wrongPending: PendingOrderRow,
+  correctedPending: PendingOrderRow
+): Promise<void> {
+  try {
+    // The original customer message that was mis-extracted (via source_message_id).
+    const { data: sourceMsg } = await adminClient
+      .from('whatsapp_messages')
+      .select('message_body')
+      .eq('message_id', wrongPending.source_message_id)
+      .maybeSingle()
+
+    const originalMessage = sourceMsg?.message_body
+    if (!originalMessage) {
+      console.log('[flow-engine] recordCorrection: original message not found — skipping')
+      return
+    }
+
+    const { error } = await adminClient.from('corrections').insert({
+      organization_id: orgId,
+      customer_phone: chatPhone,
+      original_message: originalMessage,
+      wrong_extraction: wrongPending.extraction,
+      correct_extraction: correctedPending.extraction,
+      intent: correctedPending.intent,
+      source: 'whatsapp_edit',
+      pending_order_id: correctedPending.id,
+    })
+    if (error) {
+      console.error('[flow-engine] recordCorrection insert failed:', error.message)
+      return
+    }
+    console.log('[flow-engine] correction recorded (whatsapp_edit) for', chatPhone)
+  } catch (err) {
+    console.error(
+      '[flow-engine] recordCorrection failed (non-blocking):',
+      err instanceof Error ? err.message : err
+    )
+  }
+}
+
 // ─── Slash command handler ────────────────────────────────────────────────────
 
 export async function handleCommand(
@@ -700,8 +786,18 @@ export async function handleCommand(
 
     case '/edit':
       if (restText) {
-        // Re-run detection on the new text, then post draft immediately
+        // S4.3: capture the correction. Snapshot the active (wrong) pending,
+        // re-detect on the corrected text, then record the wrong→right pair.
+        const wrongPending = await getActivePending(orgId, chatPhone)
         await handleOwnerOrderTrigger(orgId, chatPhone, restText, true)
+        if (wrongPending) {
+          const correctedPending = await getActivePending(orgId, chatPhone)
+          // Only record when re-detection actually produced a new draft (an
+          // actionable correction) — a non-actionable /edit leaves the old row.
+          if (correctedPending && correctedPending.id !== wrongPending.id) {
+            await recordCorrection(orgId, chatPhone, wrongPending, correctedPending)
+          }
+        }
       }
       break
 

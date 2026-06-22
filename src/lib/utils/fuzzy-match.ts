@@ -169,7 +169,25 @@ function normalizeStr(s: string): string {
   return s.toLowerCase().trim()
 }
 
-function scoreAgainst(raw: string, candidate: string): number {
+// Indian honorifics that customers prepend/append to names in WhatsApp
+const HONORIFICS = new Set([
+  'bhai', 'saheb', 'sahab', 'ben', 'ji', 'seth', 'sheth',
+  'kaka', 'mama', 'dada', 'ba', 'sir', 'madam', 'sir',
+])
+
+/**
+ * Strip common Indian honorifics from a name string.
+ * "patel saheb" → "patel", "vijay bhai" → "vijay", "ji patel" → "patel"
+ */
+function stripHonorifics(name: string): string {
+  const words = normalizeStr(name).split(/\s+/)
+  const filtered = words.filter(w => !HONORIFICS.has(w))
+  return filtered.length > 0 ? filtered.join(' ') : normalizeStr(name)
+}
+
+// Exported so the AI benchmark scores products against catalogs with the exact
+// same logic production uses (prevents matcher drift between test and prod).
+export function scoreAgainst(raw: string, candidate: string): number {
   const a = normalizeStr(raw)
   const b = normalizeStr(candidate)
 
@@ -184,8 +202,66 @@ function scoreAgainst(raw: string, candidate: string): number {
   return Math.min(1.0, levSim + phoneticBonus)
 }
 
+/**
+ * Token-aware scoring for customer names.
+ * Scores the raw input against:
+ *   1. The full candidate string
+ *   2. Each individual token (first name, last name) of the candidate
+ *   3. Honorific-stripped versions of both raw and candidate
+ * Takes the max across all comparisons.
+ *
+ * This fixes the core matching failure: "vijay" vs "Vijay Mehta" now scores
+ * via first-token match (1.0) instead of whole-string Levenshtein (0.46).
+ *
+ * Exported so the AI benchmark uses production's exact customer-matching logic.
+ */
+export function tokenAwareScore(raw: string, candidate: string): number {
+  const rawStripped = stripHonorifics(raw)
+  const candidateStripped = stripHonorifics(candidate)
+
+  const scores: number[] = [
+    // Full-string comparisons
+    scoreAgainst(raw, candidate),
+    scoreAgainst(rawStripped, candidateStripped),
+  ]
+
+  // Score raw against each token of the candidate name
+  const candidateTokens = candidateStripped.split(/\s+/)
+  if (candidateTokens.length > 1) {
+    for (const token of candidateTokens) {
+      if (token.length >= 2) {
+        scores.push(scoreAgainst(rawStripped, token))
+      }
+    }
+  }
+
+  // Score each token of raw against each token of candidate (for multi-word raw inputs)
+  const rawTokens = rawStripped.split(/\s+/)
+  if (rawTokens.length > 1) {
+    for (const rt of rawTokens) {
+      if (rt.length < 2) continue
+      scores.push(scoreAgainst(rt, candidateStripped))
+      for (const ct of candidateTokens) {
+        if (ct.length >= 2) {
+          scores.push(scoreAgainst(rt, ct))
+        }
+      }
+    }
+  }
+
+  return Math.max(...scores)
+}
+
 function bestScoreForFields(raw: string, fields: string[]): number {
   const scores = fields.filter(f => f.length > 0).map(f => scoreAgainst(raw, f))
+  return scores.length > 0 ? Math.max(...scores) : 0
+}
+
+/**
+ * Like bestScoreForFields but uses token-aware scoring (for customer matching).
+ */
+function bestTokenAwareScore(raw: string, fields: string[]): number {
+  const scores = fields.filter(f => f.length > 0).map(f => tokenAwareScore(raw, f))
   return scores.length > 0 ? Math.max(...scores) : 0
 }
 
@@ -199,21 +275,29 @@ export async function matchCustomer(
 ): Promise<MatchResult<Customer>> {
   const customers = await getCustomers(orgId)
   const rawNorm = normalizeStr(rawName)
+  const rawStripped = stripHonorifics(rawName)
 
-  // Fast path: exact match on name or any alias (case-insensitive)
+  // Fast path: exact match on name, first-name token, or any alias (case-insensitive)
   for (const customer of customers) {
+    const nameNorm = normalizeStr(customer.name)
+    const nameStripped = stripHonorifics(customer.name)
+    const firstToken = nameStripped.split(/\s+/)[0]
+
     if (
-      normalizeStr(customer.name) === rawNorm ||
-      customer.aliases.some(a => normalizeStr(a) === rawNorm)
+      nameNorm === rawNorm ||
+      nameStripped === rawStripped ||
+      (firstToken.length >= 2 && firstToken === rawStripped) ||
+      customer.aliases.some(a => normalizeStr(a) === rawNorm || normalizeStr(a) === rawStripped)
     ) {
       return { match: customer, confidence: 1.0, alternatives: [] }
     }
   }
 
+  // Fuzzy path: token-aware scoring (scores against individual name tokens)
   const scored = customers
     .map(customer => ({
       customer,
-      score: bestScoreForFields(rawName, [
+      score: bestTokenAwareScore(rawName, [
         customer.name,
         ...customer.aliases,
         customer.company_name ?? '',
@@ -227,7 +311,7 @@ export async function matchCustomer(
     return { match: null, confidence: top?.score ?? 0, alternatives: [] }
   }
 
-  if (top.score >= 0.85) {
+  if (top.score >= 0.80) {
     return { match: top.customer, confidence: top.score, alternatives: [] }
   }
 
@@ -271,7 +355,9 @@ export async function matchProduct(
     return { match: null, confidence: top?.score ?? 0, alternatives: [] }
   }
 
-  if (top.score >= 0.85) {
+  // Auto-match threshold lowered 0.85 → 0.80 to match matchCustomer — romanized
+  // dialect product names cluster in the 0.80-0.85 band.
+  if (top.score >= 0.80) {
     return { match: top.product, confidence: top.score, alternatives: [] }
   }
 

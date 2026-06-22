@@ -112,6 +112,9 @@ export interface EntityResult {
 
 export interface OrgContext {
   orgId: string
+  // Industry segment (e.g. 'foundry', 'textiles') — drives the Tier-3 industry
+  // dialect lookup (Layer 0). Optional for backward compatibility.
+  industrySegment?: string
   customers: Array<{ id: string; name: string; aliases?: string[] }>
   products: Array<{ id: string; name: string; aliases?: string[] }>
   vendors: Array<{ id: string; name: string; aliases?: string[] }>
@@ -159,14 +162,27 @@ export const ModificationParseResultSchema = z.object({
 
 const LANGUAGE_VALUES = ['gujarati', 'hindi', 'hinglish', 'english'] as const
 
+/**
+ * Coerce helper: accepts number OR numeric string, returns number | null.
+ * DeepSeek sometimes returns quantity/price as a string ("500" instead of 500).
+ * Without this, the Zod parse throws and discards the entire extraction.
+ */
+const coerceNumeric = z.union([
+  z.number(),
+  z.string().transform((s) => {
+    const n = Number(s)
+    return isNaN(n) ? null : n
+  }),
+]).nullable().optional()
+
 export const DeepSeekRawEntitiesSchema = z.object({
   customer_name_raw: z.string().nullable().optional(),
   vendor_name_raw: z.string().nullable().optional(),
   product_raw: z.string().nullable().optional(),
-  quantity: z.number().nullable().optional(),
+  quantity: coerceNumeric,
   unit: z.string().nullable().optional(),
   delivery_date_raw: z.string().nullable().optional(),
-  price_raw: z.number().nullable().optional(),
+  price_raw: coerceNumeric,
   defect_type: z.string().nullable().optional(),
   order_ref_raw: z.string().nullable().optional(),
 })
@@ -199,6 +215,9 @@ export interface EvaluateExtractionResult {
   reasoning: string
   failureCodes: string[]
   decision: EvalGateDecision
+  // Token usage of the eval-gate LLM call. Present when the eval ran against the
+  // model; absent on the fallback path (eval gate unavailable).
+  usage?: AIUsage
 }
 
 export interface ExtractionInput {
@@ -225,3 +244,93 @@ export const QwenEvalResponseSchema = z.object({
 })
 
 export type QwenEvalResponse = z.infer<typeof QwenEvalResponseSchema>
+
+// ─── Dialect Dictionary types ────────────────────────────────────────────────
+
+export interface DialectLookupParams {
+  message: string
+  orgId: string
+  industrySegment: string
+}
+
+export interface ResolvedToken {
+  token: string
+  canonical: string
+  tier: 1 | 2 | 3 | 4 | 5
+  category: string
+  confidence: number
+}
+
+export interface PreStructuredHints {
+  quantity?: number
+  customer_hint?: string
+  product_hint?: string
+  intent_hint?: IntentType
+}
+
+export interface DialectLookupResult {
+  resolved_tokens: ResolvedToken[]
+  pre_structured: PreStructuredHints
+  unresolved_tokens: string[]
+  raw_message: string
+  lookup_time_ms: number
+}
+
+// ─── Dialect Learning types ──────────────────────────────────────────────────
+
+export interface CorrectionParams {
+  rawMessage: string
+  aiExtraction: DeepSeekClassifyResponse
+  ownerCorrection: Record<string, unknown>
+  orgId: string
+  industrySegment: string
+  orgDictionarySummary: string
+}
+
+export interface NewDialectMapping {
+  term: string
+  canonical: string
+  category: string
+  likely_scope: 'org' | 'industry' | 'global'
+}
+
+export interface CorrectionAnalysis {
+  is_dialect_issue: boolean
+  new_mappings: NewDialectMapping[]
+  reasoning: string
+}
+
+export const CorrectionAnalysisSchema = z.object({
+  is_dialect_issue: z.boolean(),
+  new_mappings: z.array(z.object({
+    term: z.string(),
+    canonical: z.string(),
+    category: z.string(),
+    likely_scope: z.enum(['org', 'industry', 'global']),
+  })),
+  reasoning: z.string(),
+})
+
+export interface OnboardingDictParams {
+  orgId: string
+  industrySegment: string
+  products: Array<{ id: string; name: string }>
+  customers: Array<{ id: string; name: string }>
+  languagePreference: string
+}
+
+export interface OnboardingDictResult {
+  products: Array<{ name: string; aliases: string[] }>
+  customers: Array<{ name: string; aliases: string[] }>
+}
+
+export const OnboardingDictResultSchema = z.object({
+  products: z.array(z.object({
+    name: z.string(),
+    aliases: z.array(z.string()),
+  })),
+  customers: z.array(z.object({
+    name: z.string(),
+    aliases: z.array(z.string()),
+  })),
+})

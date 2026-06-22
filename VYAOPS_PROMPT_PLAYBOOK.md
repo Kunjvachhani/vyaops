@@ -16,6 +16,32 @@
 
 ---
 
+## ⚠️ S5 SECURITY INVARIANTS — every new sprint/prompt MUST follow these
+
+> Added after the S5 Security-Hardening + Platform-Admin work (2026-06-22). These override any
+> older instruction below that conflicts. Paste this block into Claude Code when building any new
+> feature that touches the DB, auth, or admin surface.
+
+1. **Auth claims live in `app_metadata`, never `user_metadata`.** Read `org_id`/`role` via
+   `getCurrentUser()` (server), the middleware helper, or RLS `_current_role()`/`_current_org_id()`.
+   Stamp them ONLY with `adminClient.auth.admin.updateUserById()` (service-role) — never from the client.
+2. **New tables get role-checked RLS through the helpers.** SELECT = org-scoped only
+   (`organization_id = _current_org_id() AND deleted_at IS NULL`); INSERT/UPDATE add
+   `AND _current_role() IN (...)`. One policy per command (Postgres OR's permissive policies — don't layer).
+   No DELETE policy. See `docs/security/RLS_POLICIES.md`.
+3. **Never hard delete.** Use `src/lib/utils/soft-delete.ts` (`softDelete`/`restore`); every query filters
+   `deleted_at IS NULL`; every mutation writes `audit_log`. Reuse `DeleteButton` + the undo toast for UI.
+4. **Admin/cross-org work goes through the platform-admin plane.** Gate with `getPlatformAdmin()`
+   (authoritative) + `app_metadata.is_platform_admin` (middleware fast path). Non-admins REDIRECT to
+   `/dashboard` (not 403). Cross-org actions require an explicit `org_id` and audit with source `platform_admin`.
+   NEVER gate platform access on a tenant role (`owner` etc.).
+5. **Service-role only:** `platform_admins`, `audit_log`, `whatsapp_*`, `*_dictionary`. Service-role key
+   stays in `src/lib/supabase/admin.ts` — never the browser.
+6. **After any change, update the docs first** (CLAUDE.md + the relevant `docs/**`), then the code —
+   and keep this playbook's affected prompts in sync.
+
+---
+
 ## MASTER PROGRESS TRACKER
 
 Use this to see where you are at a glance. Check off each item as you complete it.
@@ -72,14 +98,25 @@ Use this to see where you are at a glance. Check off each item as you complete i
 - [ ] S3.9 — Daily order summary WhatsApp messages (n8n cron)
 
 ### Sprint 4: Eval Loop + Data Safety (Weeks 7–8)
-- [ ] S4.1 — 50-case AI benchmark created
+- [-] S4.1 — 1000-case AI benchmark created (10 industries, Gujlish/Hinglish/Hindi/English)
 - [ ] S4.2 — Benchmark runner (npm run test:benchmark)
 - [ ] S4.3 — Correction → new test case pipeline
-- [ ] S4.4 — Soft delete across all tables
-- [ ] S4.5 — Destructive action confirmations (WhatsApp + web)
+- [ ] S4.3b — Dialect Dictionary: DB migration (3 tables) + static JSON (Tier 1/2)
+- [ ] S4.3c — Dialect Dictionary: Lookup module (src/lib/ai/dialect-lookup.ts)
+- [ ] S4.3d — Dialect Dictionary: Learning module (src/lib/ai/dialect-learner.ts)
+- [ ] S4.3e — Dialect Dictionary: Seed industry_dictionary with 50 MSME segments
+- [x] S4.4 — Soft delete across all tables (DONE: soft-delete.ts, DELETE handlers, /api/admin/{deleted,restore}, undo toast, DeleteButton)
+- [ ] S4.5 — Destructive action confirmations (WhatsApp + web) — web side partly done via DeleteButton confirm dialog (S4.4); WhatsApp YES-confirm still pending
 - [ ] S4.6 — Idempotency checks for orders
 - [ ] S4.7 — Sentry error monitoring live
 - [ ] S4.8 — CSV data export
+
+### S5 (out-of-band): Security Hardening + Platform Admin — DONE 2026-06-22
+> Ran from `prompts/S5-security-hardening-platform-admin.md` (NOT the same as Sprint 5 below).
+- [x] Auth claims moved user_metadata → **app_metadata** (signup, getCurrentUser, middleware; data migration)
+- [x] Role-based RLS reads app_metadata via `_current_role()`/`_current_org_id()` helpers
+- [x] `platform_admins` table (RLS, no policies) + `getPlatformAdmin()` + `(admin)` gate + cross-org recovery
+- [x] `/api/admin/{deleted,restore}` widened for cross-org platform admins; audit source `platform_admin`
 
 ### Sprint 5: Production + Inventory + Vendors (Weeks 9–10)
 - [ ] S5.1 — Production batch logging via WhatsApp
@@ -337,14 +374,20 @@ This migration must:
 1. Enable RLS on EVERY table EXCEPT audit_log and whatsapp_messages
    (those are write-only system tables, accessed via service-role)
 
+> **⚠️ S5 SECURITY-HARDENING AMENDMENT (2026-06-22):** The claim path below was superseded.
+> `org_id`/`role` now live in **`app_metadata`** (not user-editable), read through the
+> `_current_role()` / `_current_org_id()` helper functions which `COALESCE(app_metadata,
+> user_metadata)` during the migration window. Use the helpers in policies, not a raw
+> `auth.jwt()` path. See `docs/security/RLS_POLICIES.md` and migration `20260622000002_role_based_rls.sql`.
+
 2. For each RLS-enabled table, create these policies:
 
    SELECT policy — "Users can only read their own org's data":
-   - Check: organization_id = (auth.jwt() ->> 'org_id')::uuid
+   - Check: organization_id = _current_org_id()    -- helper: app_metadata→user_metadata fallback
    - Also check: deleted_at IS NULL (never show soft-deleted records)
 
-   INSERT policy — "Users can only insert into their own org":
-   - Check: organization_id = (auth.jwt() ->> 'org_id')::uuid
+   INSERT policy — "Users can only insert into their own org" (+ role check on writes):
+   - Check: organization_id = _current_org_id() AND _current_role() IN ('owner','manager')
 
    UPDATE policy — role-based:
    - Workers: can ONLY update production_batches
@@ -456,7 +499,9 @@ Build the complete authentication system using Supabase Auth.
      a. Create Supabase auth user
      b. Create organization record in organizations table
      c. Create user record in users table with role: "owner"
-     d. Store org_id and role in user_metadata
+     d. Store org_id and role in app_metadata via adminClient.auth.admin.updateUserById()
+        (mirror into user_metadata too during the S5 transition window). NEVER let the
+        client set role — app_metadata is service-role-only, so users can't self-promote.
    - Redirect to /dashboard on success
    - Zod validation on all fields
 
@@ -1939,53 +1984,31 @@ git push
 
 ---
 
-### S4.1 — AI Benchmark Creation (1–2 hours)
+### S4.1 — AI Benchmark Creation (2–3 hours)
 
-**PROMPT:**
-```
-Read docs/ai/EVAL_LOOP.md for the benchmark format and scoring criteria.
+**What this does:** Creates 1000 test cases across 10 Gujarat MSME industries, covering Gujlish (Roman-script Gujarati), Hinglish, Hindi, and English. Heavy coverage of factory slang, phonetic misspellings, and voice-to-text errors. A Python generator script produces the cases from industry catalogs.
 
-Create tests/ai/benchmark.json with 50 test cases covering:
+**STATUS: DONE** — benchmark.json v3.0.0 with 1000 cases is already generated.
+- Generator: `tests/ai/generate-benchmark.py`
+- Output: `tests/ai/benchmark.json` (469KB)
+- Distribution: easy:100, medium:200, hard:200, edge:250, gujlish:250
+- Languages: gujlish:580, hinglish:260, en:107, hi:53
+- Industries: 100 cases each across foundry, textiles, ceramics, chemicals, pharma, auto_parts, plastics, diamond, food_processing, agri
 
-10 EASY cases (clear intent, known names, single product):
-- "rajubhai no 500 piece valve body" → create_order, Raju Patel, Valve Body, 500
-- "check order status for ambica industries" → check_status, Ambica Industries
-
-10 MEDIUM cases (Gujarati/Hindi, aliases, slight misspellings):
-- "રાજુભાઈ ને 200 bearing cap" → create_order, Raju Patel, Bearing Cap, 200
-- "raju bhai ka order kya status hai" → check_status
-
-10 HARD cases (Hinglish mix, ambiguous, multiple items):
-- "rajubhai aur maheshbhai dono ka 500-500 valve body" → TWO orders
-- "kal wala order cancel kar do" → check_status (need clarification: which order?)
-
-10 EDGE cases (missing data, gibberish, adversarial):
-- "500 piece" → clarify (missing customer AND product)
-- "hello kaise ho" → unknown intent
-- "delete all orders" → reject (destructive, needs confirmation)
-
-10 MULTILINGUAL cases (pure Gujarati, pure Hindi):
-- "જયેશભાઈ નો ઓર્ડર નાખો ૩૦૦ પીસ ઈમ્પેલર" → create_order, Jayesh, Impeller, 300
-
-Each case has:
-- input: the raw message
-- expected_intent: the correct intent classification
-- expected_entities: { customer?, product?, quantity?, unit? }
-- expected_min_score: minimum eval gate score for this to pass
-- language: en/hi/gu/hinglish
-- difficulty: easy/medium/hard/edge
+To regenerate after changing catalogs:
+```bash
+cd tests/ai && python3 generate-benchmark.py
 ```
 
 **VERIFY:**
 ```bash
-# Check the file is valid JSON:
 cat tests/ai/benchmark.json | python3 -m json.tool > /dev/null
-# Should exit with no errors
+# No errors — valid JSON, 1000 cases, no duplicate IDs
 ```
 
 **COMMIT:**
 ```bash
-git add . && git commit -m "feat: 50-case AI benchmark — multilingual, multi-difficulty"
+git add . && git commit -m "feat: 1000-case AI benchmark — 10 industries, Gujlish/Hinglish/Hindi/English"
 git push
 ```
 
@@ -2005,8 +2028,10 @@ This script:
    c. Compares results against expected values
    d. Records: pass/fail, actual vs expected, latency, token usage
 3. Outputs summary:
-   - Total: X/50 passed (XX%)
-   - By difficulty: easy X/10, medium X/10, hard X/10, edge X/10, multilingual X/10
+   - Total: X/1000 passed (XX%)
+   - By industry: foundry X/100, textiles X/100, ceramics X/100, ... (10 industries)
+   - By difficulty: easy XX%, medium XX%, hard XX%, edge XX%
+   - By language: gujlish XX%, hinglish XX%, hindi XX%, english XX%
    - By dimension: customer match XX%, product match XX%, quantity XX%, intent XX%
    - Average latency: XXXms
    - Total tokens used: XXXX
@@ -2029,14 +2054,15 @@ Pass criteria per test case:
 **VERIFY:**
 ```bash
 npm run test:benchmark
-# Should run all 50 cases (takes 2-5 minutes — API calls)
+# Should run all 1000 cases (takes 10-20 minutes — API calls)
 # Should output pass rate — aim for > 80%
 # Should save results file
+# Layer 0 dialect lookup runs before each AI call — verify resolved tokens logged
 ```
 
 **COMMIT:**
 ```bash
-git add . && git commit -m "feat: AI benchmark runner — 50 cases, auto-scored"
+git add . && git commit -m "feat: AI benchmark runner — 1000 cases across 10 industries, auto-scored"
 git push
 ```
 
@@ -2059,27 +2085,317 @@ When an AI extraction is wrong and the user corrects it (via WhatsApp "Edit" but
    - Appends to tests/ai/benchmark.json
    - Avoids duplicates (checks if similar message already exists)
 
-3. Over time, this grows the benchmark from 50 → 500+ cases automatically.
+3. Over time, this grows the benchmark from 1000 → 2000+ cases automatically.
+
+4. DIALECT LEARNING INTEGRATION:
+   When a correction reveals a dialect issue (AI didn't know a word/alias):
+   - Call analyzeCorrection() from src/lib/ai/dialect-learner.ts
+   - If is_dialect_issue=true, call learnFromCorrection() to:
+     a. Upsert the new term→canonical mapping into org_dictionary (Tier 4)
+     b. Check promotion eligibility (3+ orgs → industry/global dictionary)
+   - This means corrections improve BOTH the benchmark AND the dialect dictionary
 
 Also create the database migration for the corrections table:
-- supabase/migrations/20260615000001_create_corrections_table.sql
+- supabase/migrations/20260621000002_create_corrections_table.sql
+  (the illustrative 20260615000001 collided with the applied
+  20260615000001_create_invoices_storage_bucket.sql, so it was bumped)
 ```
 
 **VERIFY:**
 ```bash
 supabase db reset    # Migration applies without error
 npm run type-check   # Zero errors
+# Test: simulate a correction → verify it creates a benchmark case AND updates org_dictionary
 ```
 
 **COMMIT:**
 ```bash
-git add . && git commit -m "feat: correction pipeline — wrong AI outputs become new test cases"
+git add . && git commit -m "feat: correction pipeline — wrong AI outputs become test cases + dialect learning"
+git push
+```
+
+---
+
+### S4.3b — Dialect Dictionary: Migration + Static Files (2 hours)
+
+**What this does:** Creates the 5-tier dialect dictionary system that pre-processes WhatsApp messages BEFORE they hit the AI. Resolves known Gujarati/Gujlish/Hindi words at zero API cost — numbers ("pachso"→500), verbs ("moklo"→send), industry jargon, and org-specific aliases.
+
+**PROMPT:**
+```
+Read docs/ai/DIALECT_DICTIONARY.md completely — this is the 5-tier lookup system spec.
+Read docs/database/SCHEMA.md — the 3 new dictionary tables (org_dictionary, industry_dictionary, global_dictionary).
+Read docs/security/RLS_POLICIES.md — the dialect dictionary RLS section.
+
+PART 1: Create Supabase migration for 3 dictionary tables.
+File: supabase/migrations/20260619000001_create_dialect_tables.sql
+
+TABLE industry_dictionary (platform-wide, no org_id):
+- id UUID PK, term TEXT NOT NULL, term_normalized TEXT NOT NULL
+- canonical TEXT NOT NULL, category TEXT NOT NULL
+  CHECK IN ('product','unit','process','defect','material','tool','measurement')
+- industry_segment TEXT NOT NULL, language TEXT DEFAULT 'gujlish'
+- confidence NUMERIC(3,2) DEFAULT 1.0, source TEXT DEFAULT 'seed'
+- promotion_count INT DEFAULT 0, is_active BOOLEAN DEFAULT TRUE
+- created_at, updated_at (NO deleted_at — platform table)
+- UNIQUE (term_normalized, industry_segment) WHERE is_active = TRUE
+- RLS: enabled, SELECT for authenticated, no INSERT/UPDATE for anon
+
+TABLE org_dictionary (per-org, standard RLS):
+- id UUID PK, organization_id UUID NOT NULL FK
+- term TEXT NOT NULL, term_normalized TEXT NOT NULL
+- canonical TEXT NOT NULL, category TEXT NOT NULL
+  CHECK IN ('product','customer','vendor','unit','alias','custom')
+- entity_id UUID (FK to products/customers/vendors), entity_type TEXT
+- source TEXT DEFAULT 'onboarding', confidence NUMERIC(3,2) DEFAULT 1.0
+- is_active BOOLEAN DEFAULT TRUE
+- created_at, updated_at, deleted_at (standard soft delete)
+- UNIQUE (organization_id, term_normalized) WHERE deleted_at IS NULL AND is_active
+- RLS: enabled, standard tenant isolation
+
+TABLE global_dictionary (platform-wide, no org_id):
+- id UUID PK, term TEXT NOT NULL, term_normalized TEXT NOT NULL
+- canonical TEXT NOT NULL, category TEXT NOT NULL
+  CHECK IN ('number','verb','noun','unit','greeting','slang')
+- language TEXT DEFAULT 'gujlish'
+- taught_by_count INT DEFAULT 1, first_seen_at TIMESTAMPTZ DEFAULT now()
+- last_confirmed_at TIMESTAMPTZ DEFAULT now()
+- confidence NUMERIC(3,2) DEFAULT 0.7, is_active BOOLEAN DEFAULT TRUE
+- created_at, updated_at (NO deleted_at — platform table)
+- UNIQUE (term_normalized, canonical) WHERE is_active = TRUE
+- RLS: enabled, SELECT for authenticated, no INSERT/UPDATE for anon
+
+PART 2: Verify these static JSON files exist and are valid:
+- src/config/dialect/universal.json (Tier 1: ~350 entries — numbers, verbs, postpositions, time words, units, honorifics)
+- src/config/dialect/business.json (Tier 2: ~200 entries — order, payment, invoice, delivery, inventory, production, compliance terms)
+
+If they don't exist, create them following DIALECT_DICTIONARY.md specs.
+```
+
+**VERIFY:**
+```bash
+supabase db reset
+# All migrations apply including new dictionary tables
+
+# Check tables exist:
+# http://localhost:54323 → Table Editor → industry_dictionary, org_dictionary, global_dictionary
+
+# Validate JSON files:
+cat src/config/dialect/universal.json | python3 -m json.tool > /dev/null
+cat src/config/dialect/business.json | python3 -m json.tool > /dev/null
+```
+
+**COMMIT:**
+```bash
+git add . && git commit -m "feat: dialect dictionary — 3 DB tables + static Tier 1/2 JSON files"
+git push
+```
+
+---
+
+### S4.3c — Dialect Dictionary: Lookup Module (2–3 hours)
+
+**What this does:** The core lookup engine. Every WhatsApp message passes through this BEFORE hitting DeepSeek. It tokenizes the message, looks up each token across 5 tiers (org→industry→global→business→universal), and returns pre-resolved entities that the AI validates rather than discovers from scratch.
+
+**PROMPT:**
+```
+Read docs/ai/DIALECT_DICTIONARY.md — especially the "Lookup Algorithm" and "Normalization" sections.
+Read docs/ai/DATA_ALIGNMENT_ENGINE.md — Layer 0 integration.
+
+Build src/lib/ai/dialect-lookup.ts:
+
+1. normalizeDialectTerm(raw: string): string
+   - Lowercase, trim whitespace
+   - Remove punctuation except hyphens
+   - Unicode NFC normalization
+   - Strip trailing honorifics: -bhai, -saheb, -ben, -ji, -seth, -sheth, -kaka
+   - Collapse multiple spaces to single
+
+2. tokenize(message: string): string[]
+   - Split on whitespace
+   - Also try 2-gram and 3-gram sliding windows (for multi-word terms like "valve body")
+   - Return all possible token combinations, longest first
+
+3. lookupDialect(params: DialectLookupParams): Promise<DialectLookupResult>
+   Params: { message, orgId, industrySegment }
+   
+   Algorithm:
+   a. Tokenize the message
+   b. For each token (longest first, greedy match):
+      - Tier 4: query org_dictionary WHERE organization_id = orgId AND term_normalized = normalize(token) AND is_active AND deleted_at IS NULL
+      - Tier 3: query industry_dictionary WHERE industry_segment = industrySegment AND term_normalized = normalize(token) AND is_active
+      - Tier 5: query global_dictionary WHERE term_normalized = normalize(token) AND is_active
+      - Tier 2: lookup in business.json (in-memory, loaded once at startup)
+      - Tier 1: lookup in universal.json (in-memory, loaded once at startup)
+      - First hit wins — stop checking lower tiers for this token
+   c. Build pre-structured hints:
+      - If a number was resolved → pre_structured.quantity = resolved value
+      - If a product was resolved → pre_structured.product_hint = canonical
+      - If a customer alias was resolved → pre_structured.customer_hint = canonical
+      - If an intent verb was resolved → pre_structured.intent_hint = mapped intent
+   
+   Return DialectLookupResult:
+   {
+     resolved_tokens: Array<{ token, canonical, tier, category, confidence }>,
+     pre_structured: { quantity?, customer_hint?, product_hint?, intent_hint? },
+     unresolved_tokens: string[],
+     raw_message: string,
+     lookup_time_ms: number
+   }
+
+4. Caching:
+   - Cache org_dictionary per org for 5 minutes (Map<orgId, {entries, expiry}>)
+   - Cache industry_dictionary per segment for 30 minutes
+   - global_dictionary cached for 30 minutes
+   - Static JSON (Tier 1/2) loaded once at module init, never expires
+
+5. Types in src/types/ai.ts:
+   - DialectLookupParams, DialectLookupResult, ResolvedToken, PreStructuredHints
+
+6. Integration point:
+   - Update src/lib/ai/model-router.ts routeAndProcess():
+     BEFORE calling classifyIntent, call lookupDialect()
+     If resolved_tokens exist → use Prompt #9 (dialect-aware) instead of Prompt #1
+     Pass DialectLookupResult alongside raw message to AI
+```
+
+**VERIFY:**
+```bash
+npm run type-check   # Zero errors
+
+# Manual test in Node REPL or a test script:
+# lookupDialect({ message: "pachso valv bodi moklo", orgId: "...", industrySegment: "foundry" })
+# Expected: resolved_tokens includes pachso→500 (tier 1), moklo→send (tier 1)
+# pre_structured.quantity = 500, pre_structured.intent_hint = "NEW_ORDER"
+```
+
+**COMMIT:**
+```bash
+git add . && git commit -m "feat: dialect lookup module — 5-tier token resolution with caching"
+git push
+```
+
+---
+
+### S4.3d — Dialect Dictionary: Learning Module (2 hours)
+
+**What this does:** When an owner corrects a draft, the system learns. If the AI misidentified "pamp bodi" as "Valve Body" and the owner changed it to "Pump Housing", the correction gets stored so it never happens again. When 3+ orgs teach the same word, it gets promoted to the shared dictionary.
+
+**PROMPT:**
+```
+Read docs/ai/DIALECT_DICTIONARY.md — "Learning Loop" and "Promotion Logic" sections.
+Read docs/ai/PROMPT_LIBRARY.md — Prompt #11 (Correction Analyzer).
+
+Build src/lib/ai/dialect-learner.ts:
+
+1. analyzeCorrection(params: CorrectionParams): Promise<CorrectionAnalysis>
+   Params: { rawMessage, aiExtraction, ownerCorrection, orgId, industrySegment, orgDictionarySummary }
+   
+   - Call Prompt #11 via model-router (DeepSeek)
+   - Returns: { is_dialect_issue, new_mappings: [{term, canonical, category, likely_scope}], reasoning }
+   - Zod-validate the AI response
+
+2. learnFromCorrection(analysis: CorrectionAnalysis, orgId: string): Promise<void>
+   For each new_mapping:
+   a. Upsert into org_dictionary (Tier 4):
+      - term_normalized = normalizeDialectTerm(term)
+      - Link entity_id if category is 'product' or 'customer' (fuzzy match canonical against master data)
+      - source = 'owner_correction', confidence = 0.9
+      - If already exists, bump confidence (max 1.0)
+   b. Check promotion eligibility:
+      - Query org_dictionary across ALL orgs for same term_normalized→canonical
+      - If 3+ different orgs have this mapping AND likely_scope = 'industry':
+        → Upsert into industry_dictionary (Tier 3) via service-role
+        → Set promotion_count = number of confirming orgs
+      - If 3+ orgs across ANY industry:
+        → Upsert into global_dictionary (Tier 5) via service-role
+        → Set taught_by_count = number of confirming orgs
+
+3. generateOnboardingDictionary(params: OnboardingParams): Promise<OnboardingDictResult>
+   Params: { orgId, industrySegment, products, customers, languagePreference }
+   
+   - Call Prompt #10 via model-router (DeepSeek)
+   - Returns generated aliases for each product and customer
+   - Bulk-insert into org_dictionary with source = 'onboarding_ai'
+   - These entries have confidence = 0.7 (AI-generated, not owner-confirmed)
+
+4. confirmOnboardingEntry(orgId: string, entryId: string): Promise<void>
+   - Owner reviews AI-generated aliases on "Dictionary Review" screen
+   - Confirmed → confidence bumps to 1.0
+   - Rejected → is_active = false (soft disable)
+
+5. Types in src/types/ai.ts:
+   - CorrectionParams, CorrectionAnalysis, OnboardingParams, OnboardingDictResult
+```
+
+**VERIFY:**
+```bash
+npm run type-check   # Zero errors
+```
+
+**COMMIT:**
+```bash
+git add . && git commit -m "feat: dialect learning module — corrections, promotions, onboarding generator"
+git push
+```
+
+---
+
+### S4.3e — Dialect Dictionary: Seed Industry Data (1–2 hours)
+
+**What this does:** Pre-loads the industry_dictionary with jargon for 50 Gujarat MSME segments — foundry, textiles, ceramics, chemicals, pharma, auto parts, plastics, diamond, food processing, agri, and 40 more. Factory owners get accurate results from day one.
+
+**PROMPT:**
+```
+Read docs/ai/DIALECT_DICTIONARY.md — "Tier 3: Industry Dictionary" section.
+
+Create supabase/migrations/20260619000002_seed_industry_dictionary.sql:
+
+Seed industry_dictionary with terms for these 10 major Gujarat MSME industries
+(~20-30 terms each = ~250 rows total):
+
+1. foundry: saancho→mould, dhatu→metal, casting→casting, bhatti→furnace, lokhandi→iron, pittal→brass, tambanu→copper, kaathli→lathe, chamkavo→polish, ghadhvo→forge, pattern→pattern, chhippu→chip/flash, pighlaavu→melt, taliya→sprue, riser→riser
+2. textiles: thaan→bolt, kapadh→cloth/fabric, dhago→thread/yarn, rangaai→dyeing, vanavat→weaving, chhapkaam→printing, suti→cotton, reshmi→silk, bunvu→weave, katraan→cutting_waste, khadi→handloom, synthetic→synthetic, metre→metres, loom→loom
+3. ceramics: rangoli→glaze, bhatti→kiln, maati→clay, tile→tile, firing→firing, vitrified→vitrified, slip→slip, biscuit→bisque, polski→polish, sanitaryware→sanitaryware, tableware→tableware
+4. chemicals: dravya→chemical, acid→acid, alkali→alkali, solvent→solvent, catalyst→catalyst, compound→compound, batch→batch, reactor→reactor, distillation→distillation, pigment→pigment
+5. pharma: goli→tablet, capsule→capsule, dawai→medicine, syrup→syrup, injection→injection, batch→batch, strip→strip, formulation→formulation, api→api_ingredient, excipient→excipient
+6. auto_parts: patti→sheet, nut_bolt→nut_bolt, washer→washer, bearing→bearing, brake→brake, silencer→silencer, radiator→radiator, clutch→clutch, gasket→gasket, bushing→bushing
+7. plastics: danu→granules, mould→mould, injection→injection_moulding, extrusion→extrusion, blow→blow_moulding, pet→pet, hdpe→hdpe, pp→polypropylene, scrap→regrind, preform→preform
+8. diamond: heero→diamond, polishing→polishing, ghaat→faceting, kaankaro→rough_stone, four_p→4p_cut, marking→marking, sawing→sawing, laser→laser_cutting, carat→carat, sieve→sieve_size
+9. food_processing: masalo→spice, daal→lentil, tel→oil, ghee→ghee, atta→flour, packaging→packaging, grading→grading, cleaning→cleaning, roasting→roasting, grinding→grinding
+10. agri: khaatar→fertilizer, beej→seed, dawai→pesticide, paak→crop, sinchai→irrigation, tractor→tractor, harvest→harvest, spray→spraying, soil→soil, organic→organic
+
+All terms in Gujlish (Roman-script Gujarati). Set language='gujlish', source='seed', confidence=1.0.
+Include Gujarati script variants where common.
+```
+
+**VERIFY:**
+```bash
+supabase db reset
+# Check industry_dictionary table → should have ~250 rows across 10 segments
+
+# Quick count check:
+# http://localhost:54323 → SQL Editor
+# SELECT industry_segment, COUNT(*) FROM industry_dictionary GROUP BY industry_segment;
+# Each segment should have 15-30 entries
+```
+
+**COMMIT:**
+```bash
+git add . && git commit -m "feat: seed industry dictionary — 250 terms across 10 Gujarat MSME segments"
 git push
 ```
 
 ---
 
 ### S4.4 — Soft Delete System (1–2 hours)
+
+> **✅ DONE (2026-06-22).** Built ahead of sprint order: `src/lib/utils/soft-delete.ts`
+> (`softDelete`/`restore` + org verification + audit), DELETE handlers on orders/customers/
+> invoices `[id]` routes, `GET /api/admin/deleted` + `POST /api/admin/restore`, the 30s "Undo"
+> toast (`src/lib/hooks/use-undoable-delete.ts` + `<Toaster>` in the dashboard shell), and a
+> reusable `DeleteButton` wired into the order/customer/invoice detail dialogs. S5 hardening then
+> widened the admin routes for cross-org platform-admin recovery. The original prompt is kept
+> below for reference.
 
 **PROMPT:**
 ```
@@ -2132,6 +2448,12 @@ git push
 ---
 
 ### S4.5 — Destructive Action Confirmations (1–2 hours)
+
+> **⚠️ S5 AMENDMENT (2026-06-22):** The WEB side is partly built. `DeleteButton`
+> (`src/components/shared/delete-button.tsx`) already shows a confirm dialog + 30s undo and is
+> wired into the order/customer/invoice detail dialogs. Build the remaining pieces ON TOP of it
+> (typed-name confirmation for extra-dangerous actions, status-backward warnings). The WhatsApp
+> "reply YES to confirm" flow is still unbuilt — that is the main outstanding part of S4.5.
 
 **PROMPT:**
 ```
@@ -2315,6 +2637,13 @@ git push
 Read docs/database/SCHEMA.md for the production_batches table structure.
 
 Build production logging that workers can do from the factory floor via WhatsApp:
+
+IMPORTANT: All WhatsApp messages pass through Layer 0 (dialect dictionary lookup via
+src/lib/ai/dialect-lookup.ts) BEFORE hitting the AI. This means production-related
+Gujarati/Gujlish terms like "utpadan" (production), "nakaro" (rejection), "ret" (sand),
+are already resolved to English canonicals before DeepSeek sees them.
+When building the WhatsApp flow, call lookupDialect() first, then pass both raw message
+AND resolved tokens to the AI classification pipeline.
 
 1. WhatsApp production flow:
    - Worker sends "production" or taps Production menu item
@@ -3202,7 +3531,7 @@ Build a new-user onboarding wizard that runs after first signup.
 
 src/app/(dashboard)/onboarding/page.tsx:
 
-Multi-step wizard (5 steps):
+Multi-step wizard (7 steps):
 
 STEP 1 — Welcome:
 - "Welcome to VyaOps, [Name]! Let's set up your factory in 5 minutes."
@@ -3224,12 +3553,22 @@ STEP 4 — Add Your Products:
 - Edit prices before saving
 - "Add Custom Product" option
 
-STEP 5 — Connect WhatsApp:
+STEP 5 — Generate Dialect Dictionary:
+After products + customers are saved, auto-generate dialect dictionary entries:
+- Call generateOnboardingDictionary() from src/lib/ai/dialect-learner.ts (Prompt #10)
+- Pass: industrySegment, languagePreference, products list, customers list
+- AI generates likely Gujlish/Hindi aliases for each product and customer name
+- Show results to owner for review: "We think 'vb' means 'Valve Body' — correct?"
+- Owner confirms/rejects each alias via confirmOnboardingEntry()
+- Confirmed aliases saved to org_dictionary (Tier 4) with confidence=1.0
+- Skippable: "I'll review later" button
+
+STEP 6 — Connect WhatsApp:
 - Instructions to connect their WhatsApp number via Dualhook Embedded Signup
 - One-click Embedded Signup flow (connects their existing WhatsApp Business App number to Cloud API via Coexistence)
 - "I'll do this later" option
 
-STEP 6 — Done!
+STEP 7 — Done!
 - "Your factory is ready! 🏭"
 - Quick tour: "Here's what you can do..."
 - "Go to Dashboard" button
@@ -3242,13 +3581,14 @@ Don't show wizard again for completed orgs.
 ```bash
 npm run dev
 # Create new account → should redirect to onboarding wizard
-# Walk through all steps → should save data at each step
+# Walk through all 7 steps → should save data at each step
+# Step 5: dialect dictionary aliases generated and shown for review
 # Finish → redirect to dashboard → wizard doesn't show again
 ```
 
 **COMMIT:**
 ```bash
-git add . && git commit -m "feat: onboarding wizard — 6-step setup for new factory owners"
+git add . && git commit -m "feat: onboarding wizard — 7-step setup with dialect dictionary generation"
 git push
 ```
 
@@ -3256,18 +3596,29 @@ git push
 
 ### S8.2 — Admin Dashboard (2 hours)
 
+> **⚠️ S5 AMENDMENT (2026-06-22): the admin AUTH MODEL is already built — do NOT rebuild it.**
+> - Access is NOT "your email + 403". It is the `platform_admins` table (RLS enabled, no policies →
+>   service-role only) checked by `getPlatformAdmin()` (`src/lib/supabase/platform-admin.ts`).
+> - The `(admin)` route group is gated in `src/middleware.ts` via the `app_metadata.is_platform_admin`
+>   fast path, and authoritatively re-checked in `src/app/(admin)/layout.tsx`. Non-admins are
+>   **REDIRECTED to /dashboard** (not shown a 403).
+> - `src/app/(admin)/admin/page.tsx` already renders org/user counts + recent audit; `/admin/recovery`
+>   does cross-org soft-delete recovery. **S8.2's job is now ADDITIVE**: add the revenue/MRR, system-health,
+>   and per-tier widgets below onto the existing admin shell. Add new platform admins by inserting into
+>   `platform_admins` + stamping `app_metadata.is_platform_admin` (see migration `20260622000003`).
+> - Update the VERIFY step: "regular email → /admin" should **redirect to /dashboard**, not return 403.
+
 **PROMPT:**
 ```
-Build the internal admin dashboard at src/app/(admin)/.
+Extend the existing internal admin dashboard at src/app/(admin)/ (auth + recovery already built in S5).
 
 This is for YOUR team to monitor all customers, not visible to factory owners.
 
-src/app/(admin)/page.tsx:
+Add to src/app/(admin)/admin/page.tsx (keep the existing platform-admin gate + recovery link):
 
 1. Admin-only access:
-   - Create an "admin" role check in middleware
-   - Your personal email(s) get admin access
-   - All other users → 403
+   - ALREADY DONE — getPlatformAdmin() gate in (admin)/layout.tsx + middleware is_platform_admin.
+   - Do NOT add an email-based check or a 403; non-admins redirect to /dashboard.
 
 2. Customer overview:
    - Table: Org Name, Owner, Tier, Created Date, Last Active, Orders Count, ₹ Saved
@@ -3295,8 +3646,8 @@ src/app/(admin)/page.tsx:
 **VERIFY:**
 ```bash
 npm run dev
-# Login with admin email → /admin should load
-# Login with regular email → /admin should show 403
+# Login as a seeded platform admin (row in platform_admins + app_metadata.is_platform_admin) → /admin loads
+# Login as a regular org owner → /admin REDIRECTS to /dashboard (not a 403)
 ```
 
 **COMMIT:**
@@ -3376,6 +3727,14 @@ FEATURE GATING:
 - [ ] tier_1 org can't access production
 - [ ] tier_2 org can access production
 - [ ] Upsell pages render correctly
+
+DIALECT DICTIONARY:
+- [ ] Layer 0 lookup resolves known Gujlish terms before AI call
+- [ ] org_dictionary entries created during onboarding (Prompt #10)
+- [ ] Owner correction triggers dialect learning (analyzeCorrection → learnFromCorrection)
+- [ ] Promotion works: 3+ orgs with same mapping → industry/global dictionary
+- [ ] Cache invalidation works after new terms learned
+- [ ] Static JSON files (universal.json, business.json) load correctly
 
 i18n:
 - [ ] All pages work in Gujarati
@@ -3467,6 +3826,14 @@ Run a comprehensive security audit and fix all issues.
    - Write test queries that try to access another org's data → must return empty
    - Test: user with role "worker" trying to update orders → must fail
    - Test: client-side request without auth → must return 401
+   - Test: org_dictionary RLS — org A can't see org B's dictionary entries
+   - Test: industry_dictionary + global_dictionary — authenticated can SELECT, cannot INSERT/UPDATE
+   - Test: anon key cannot write to any dictionary table
+   - (S5) Test: a user CANNOT self-promote — supabase.auth.updateUser({ data:{ role:'owner' }})
+     from the browser must NOT change effective role (getCurrentUser/RLS read app_metadata, not user_metadata)
+   - (S5) Test: platform_admins is unreadable/unwritable via anon/authenticated keys (RLS, no policies)
+   - (S5) Test: a non-platform-admin hitting /admin redirects to /dashboard; only platform_admins reach it
+   - (S5) Test: cross-org restore via /api/admin/restore requires getPlatformAdmin() and logs source 'platform_admin'
 
 2. Webhook security:
    - WhatsApp webhook: signature verification is enforced (reject invalid signatures)

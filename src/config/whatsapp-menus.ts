@@ -206,77 +206,8 @@ export const SUBMENU_DEFS: SubMenuDef[] = [
   },
 ]
 
-// ─── Button ID → pipeline action ─────────────────────────────────────────────
-
-export const BUTTON_ACTION_MAP: Record<string, string> = {
-  // top-level feature triggers
-  menu_orders: 'show_orders_submenu',
-  menu_invoices: 'show_invoices_submenu',
-  menu_customers: 'show_customer_list',
-  menu_vendors: 'show_vendor_list',
-  menu_production: 'show_production_submenu',
-  menu_quality: 'show_quality_submenu',
-  menu_inventory: 'show_inventory_submenu',
-  menu_cash_flow: 'show_cashflow_submenu',
-  menu_compliance: 'show_compliance_submenu',
-  menu_sop_builder: 'show_sop_submenu',
-  // orders
-  order_new: 'start_order_flow',
-  order_status: 'show_order_status',
-  order_history: 'show_order_history',
-  // invoices
-  invoice_create: 'start_invoice_flow',
-  invoice_pending: 'show_pending_invoices',
-  invoice_history: 'show_invoice_history',
-  // customers
-  customer_list: 'show_customer_list',
-  customer_add: 'start_customer_add_flow',
-  customer_dues: 'show_customer_dues',
-  // vendors
-  vendor_list: 'show_vendor_list',
-  vendor_po: 'start_vendor_po_flow',
-  vendor_dues: 'show_vendor_dues',
-  // production
-  production_update: 'start_production_update_flow',
-  production_view: 'show_production_jobs',
-  production_report: 'show_production_report',
-  // quality
-  quality_log: 'start_quality_log_flow',
-  quality_view: 'show_quality_reports',
-  // inventory
-  inventory_check: 'show_inventory_levels',
-  inventory_update: 'start_inventory_update_flow',
-  inventory_low: 'show_low_stock',
-  // cash flow
-  cashflow_today: 'show_cashflow_today',
-  cashflow_pending: 'show_pending_payments',
-  // compliance
-  compliance_gst: 'show_gst_status',
-  compliance_docs: 'show_compliance_docs',
-  // sop
-  sop_view: 'show_sop_list',
-  sop_create: 'start_sop_create_flow',
-  // clarification
-  clarify_retype: 'prompt_retype',
-  // confirmation
-  confirm_order: 'commit_order',
-  edit_order: 'edit_order',
-  cancel_order: 'cancel_order_flow',
-  confirm_invoice: 'commit_invoice',
-  edit_invoice: 'edit_invoice',
-  cancel_invoice: 'cancel_invoice_flow',
-}
-
 // ─── Lookup helpers ───────────────────────────────────────────────────────────
 
 export function getSubMenuDef(featureKey: string): SubMenuDef | undefined {
   return SUBMENU_DEFS.find((d) => d.featureKey === featureKey)
-}
-
-export function resolveAction(buttonId: string): string | undefined {
-  // Handle dynamic confirm/edit/cancel IDs (e.g. confirm_order, edit_invoice)
-  if (buttonId in BUTTON_ACTION_MAP) return BUTTON_ACTION_MAP[buttonId]
-  const [prefix, ...rest] = buttonId.split('_')
-  const genericKey = `${prefix}_${rest.join('_')}`
-  return BUTTON_ACTION_MAP[genericKey]
 }

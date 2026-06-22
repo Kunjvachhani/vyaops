@@ -4,6 +4,7 @@ import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import type { Database } from '@/types/database'
 import { diffChanges, logAudit } from '@/lib/utils/audit'
 import { updateCustomerSchema } from '@/lib/validations/customer'
+import { softDelete, SoftDeleteError } from '@/lib/utils/soft-delete'
 
 type CustomerRow = Database['public']['Tables']['customers']['Row']
 type CustomerUpdate = Database['public']['Tables']['customers']['Update']
@@ -178,4 +179,33 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
   })
 
   return NextResponse.json({ data: updated })
+}
+
+// DELETE /api/customers/[id]
+// Soft-deletes the customer (stamps deleted_at, audited). Never hard deletes.
+// Requires: owner or manager role. Restore via POST /api/admin/restore.
+export async function DELETE(req: NextRequest, { params }: RouteContext) {
+  const { id } = await params
+  const user = await getCurrentUser()
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, { status: 401 })
+  }
+  if (user.role === 'worker' || user.role === 'viewer') {
+    return NextResponse.json({ error: 'Insufficient permissions', code: 'FORBIDDEN' }, { status: 403 })
+  }
+
+  try {
+    await softDelete('customers', id, user.org_id, user.id, { ip: getIp(req) })
+  } catch (err) {
+    if (err instanceof SoftDeleteError) {
+      if (err.code === 'NOT_FOUND' || err.code === 'ALREADY_DELETED') {
+        return NextResponse.json({ error: 'Customer not found', code: 'NOT_FOUND' }, { status: 404 })
+      }
+      console.error('[DELETE /api/customers/[id]]', err)
+      return NextResponse.json({ error: 'Failed to delete customer', code: 'DB_ERROR' }, { status: 500 })
+    }
+    throw err
+  }
+
+  return NextResponse.json({ data: { id, table: 'customers', deleted: true } })
 }

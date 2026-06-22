@@ -5,6 +5,8 @@ import { useTranslations } from 'next-intl'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -17,6 +19,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { CreateInvoiceDialog } from '@/app/(dashboard)/invoices/_components/create-invoice-dialog'
+import { InvoiceDetailDialog } from '@/app/(dashboard)/invoices/_components/invoice-detail-dialog'
+import { DeleteButton } from '@/components/shared/delete-button'
 import { paiseToCurrency } from '@/lib/utils/currency'
 import { formatISTDate, formatIST } from '@/lib/utils/date'
 import type { Json } from '@/types/database'
@@ -87,9 +92,10 @@ interface OrderDetailDialogProps {
   orderId: string | null
   onOpenChange: (open: boolean) => void
   onUpdated: () => void
+  canDelete?: boolean
 }
 
-export function OrderDetailDialog({ orderId, onOpenChange, onUpdated }: OrderDetailDialogProps) {
+export function OrderDetailDialog({ orderId, onOpenChange, onUpdated, canDelete = false }: OrderDetailDialogProps) {
   const t = useTranslations('pages.orders')
   const tc = useTranslations('common')
 
@@ -98,14 +104,22 @@ export function OrderDetailDialog({ orderId, onOpenChange, onUpdated }: OrderDet
   const [loading, setLoading] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [actionError, setActionError] = useState('')
+  const [revertTarget, setRevertTarget] = useState<OrderStatus | null>(null)
+
+  // Invoice linkage: id of an existing (non-cancelled) invoice for this order, if any.
+  const [existingInvoiceId, setExistingInvoiceId] = useState<string | null>(null)
+  const [createInvoiceOpen, setCreateInvoiceOpen] = useState(false)
+  const [viewInvoiceId, setViewInvoiceId] = useState<string | null>(null)
 
   const fetchOrder = useCallback(async (id: string) => {
     setLoading(true)
     setActionError('')
     try {
-      const [orderRes, auditRes] = await Promise.all([
+      const [orderRes, auditRes, invoiceRes] = await Promise.all([
         fetch(`/api/orders/${id}`),
         fetch(`/api/orders/${id}/audit`),
+        // Lightweight check: does this order already have a (non-cancelled) invoice?
+        fetch(`/api/invoices?order_id=${id}&limit=1`),
       ])
       if (orderRes.ok) {
         const json = await orderRes.json()
@@ -114,6 +128,13 @@ export function OrderDetailDialog({ orderId, onOpenChange, onUpdated }: OrderDet
       if (auditRes.ok) {
         const json = await auditRes.json()
         setAudit((json.data as AuditEntry[]) ?? [])
+      }
+      if (invoiceRes.ok) {
+        const json = await invoiceRes.json()
+        const live = ((json.data as { id: string; status: string }[]) ?? []).find(
+          (inv) => inv.status !== 'cancelled'
+        )
+        setExistingInvoiceId(live?.id ?? null)
       }
     } finally {
       setLoading(false)
@@ -127,6 +148,7 @@ export function OrderDetailDialog({ orderId, onOpenChange, onUpdated }: OrderDet
       setOrder(null)
       setAudit([])
       setActionError('')
+      setExistingInvoiceId(null)
     }
   }, [orderId, fetchOrder])
 
@@ -166,6 +188,7 @@ export function OrderDetailDialog({ orderId, onOpenChange, onUpdated }: OrderDet
   const open = orderId !== null
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(v) => !v && onOpenChange(false)}>
       <DialogContent className="sm:max-w-[680px]">
         <DialogHeader>
@@ -320,26 +343,94 @@ export function OrderDetailDialog({ orderId, onOpenChange, onUpdated }: OrderDet
                 </Button>
               )}
               {order.status === 'confirmed' && (
-                <Button size="sm" onClick={() => updateStatus('in_production')} disabled={updating}>
-                  {updating ? t('detail.updating') : t('detail.startProduction')}
-                </Button>
-              )}
-              {order.status === 'in_production' && (
-                <Button size="sm" onClick={() => updateStatus('completed')} disabled={updating}>
-                  {updating ? t('detail.updating') : t('detail.markComplete')}
-                </Button>
-              )}
-              {order.status === 'completed' && (
                 <>
-                  <Button size="sm" variant="outline" disabled>
-                    {t('detail.generateInvoice')}
+                  <Button size="sm" onClick={() => updateStatus('in_production')} disabled={updating}>
+                    {updating ? t('detail.updating') : t('detail.startProduction')}
                   </Button>
-                  <Button size="sm" onClick={() => updateStatus('dispatched')} disabled={updating}>
-                    {updating ? t('detail.updating') : t('detail.markDispatched')}
+                  <Button size="sm" variant="outline" onClick={() => setRevertTarget('draft')} disabled={updating}>
+                    {t('detail.revertTo', { status: statusLabel('draft') })}
                   </Button>
                 </>
               )}
+              {order.status === 'in_production' && (
+                <>
+                  <Button size="sm" onClick={() => updateStatus('completed')} disabled={updating}>
+                    {updating ? t('detail.updating') : t('detail.markComplete')}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setRevertTarget('confirmed')} disabled={updating}>
+                    {t('detail.revertTo', { status: statusLabel('confirmed') })}
+                  </Button>
+                </>
+              )}
+              {order.status === 'completed' && (
+                <>
+                  {existingInvoiceId ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setViewInvoiceId(existingInvoiceId)}
+                    >
+                      {t('detail.viewInvoice')}
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setCreateInvoiceOpen(true)}
+                    >
+                      {t('detail.generateInvoice')}
+                    </Button>
+                  )}
+                  <Button size="sm" onClick={() => updateStatus('dispatched')} disabled={updating}>
+                    {updating ? t('detail.updating') : t('detail.markDispatched')}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setRevertTarget('in_production')} disabled={updating}>
+                    {t('detail.revertTo', { status: statusLabel('in_production') })}
+                  </Button>
+                </>
+              )}
+              {canDelete && (
+                <DeleteButton
+                  endpoint={`/api/orders/${order.id}`}
+                  table="orders"
+                  id={order.id}
+                  label={order.order_number}
+                  onChange={() => {
+                    onOpenChange(false)
+                    onUpdated()
+                  }}
+                />
+              )}
             </div>
+
+            {/* ── Backward-status warning dialog ── */}
+            <Dialog open={revertTarget !== null} onOpenChange={(v) => { if (!v) setRevertTarget(null) }}>
+              <DialogContent className="sm:max-w-[420px]">
+                <DialogHeader>
+                  <DialogTitle>{t('detail.backwardStatusTitle')}</DialogTitle>
+                  <DialogDescription>
+                    {t('detail.backwardStatusDesc', { status: revertTarget ? statusLabel(revertTarget) : '' })}
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setRevertTarget(null)} autoFocus>
+                    {tc('cancel')}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    disabled={updating}
+                    onClick={async () => {
+                      if (!revertTarget) return
+                      const target = revertTarget
+                      setRevertTarget(null)
+                      await updateStatus(target)
+                    }}
+                  >
+                    {t('detail.backwardStatusConfirm')}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
 
             {/* ── Audit Trail ── */}
             <div>
@@ -384,5 +475,27 @@ export function OrderDetailDialog({ orderId, onOpenChange, onUpdated }: OrderDet
         )}
       </DialogContent>
     </Dialog>
+
+      {/* Generate an invoice for this order (pre-selected, skips the order picker). */}
+      <CreateInvoiceDialog
+        open={createInvoiceOpen}
+        onOpenChange={setCreateInvoiceOpen}
+        presetOrderId={order?.id ?? null}
+        onSuccess={() => {
+          if (order) fetchOrder(order.id)
+          onUpdated()
+        }}
+      />
+
+      {/* View the existing invoice for this order. */}
+      <InvoiceDetailDialog
+        invoiceId={viewInvoiceId}
+        onOpenChange={(o) => !o && setViewInvoiceId(null)}
+        onUpdated={() => {
+          if (order) fetchOrder(order.id)
+          onUpdated()
+        }}
+      />
+    </>
   )
 }

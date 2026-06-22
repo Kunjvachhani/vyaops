@@ -14,7 +14,7 @@
 ## Read These Docs Before Writing Any Code
 ```
 REQUIRED READING ORDER:
-1. docs/database/SCHEMA.md          → Complete database schema (20 tables)
+1. docs/database/SCHEMA.md          → Complete database schema (23 tables)
 2. docs/security/RLS_POLICIES.md    → Row-Level Security for multi-tenancy
 3. docs/security/FEATURE_GATING.md  → Tier-based feature access control
 4. docs/security/EDGE_CASES.md      → Safety, destructive action protection
@@ -22,8 +22,10 @@ REQUIRED READING ORDER:
 6. docs/architecture/WHATSAPP_COEXISTENCE.md  → Coexistence mode details
 7. docs/architecture/MESSAGE_PIPELINE.md      → WhatsApp processing pipeline
 8. docs/ai/EVAL_LOOP.md             → Anti-slop scoring system
-9. docs/ai/DATA_ALIGNMENT_ENGINE.md → 5-layer NLP pipeline
-10. docs/ai/PROMPT_LIBRARY.md       → All AI system prompts
+9. docs/ai/DATA_ALIGNMENT_ENGINE.md → 6-layer NLP pipeline (Layer 0 = dialect dictionary)
+10. docs/ai/PROMPT_LIBRARY.md       → All AI system prompts (incl. dialect-aware)
+10b. docs/ai/DIALECT_DICTIONARY.md  → 5-tier dialect lookup system (Tier 1-5)
+10c. docs/ai/vyaops_prompt_playbook.md → Operational prompt flow & routing guide
 11. docs/infrastructure/N8N_PIPELINE.md    → Workflow automations
 12. docs/infrastructure/DEPLOYMENT.md      → Hosting and DevOps
 13. docs/billing/RAZORPAY_INTEGRATION.md   → Payment system
@@ -132,10 +134,23 @@ npm run test:benchmark         # AI eval benchmark suite
 8. NEVER log sensitive data (full phones, GSTINs, amounts) to Sentry.
 9. All monetary values stored as PAISE (integer). No floats for money.
 10. All timestamps stored as UTC. Displayed as IST.
-11. `audit_log`, `whatsapp_messages`, and `whatsapp_sessions` intentionally have RLS disabled — they are
-    service-role-only, append-only tables. BEFORE GOING TO PRODUCTION: audit every query touching these
-    three tables and confirm none use the anon key (`src/lib/supabase/client.ts` or
-    `src/lib/supabase/server.ts`). All reads/writes MUST go through `adminClient` only.
+11. `audit_log`, `whatsapp_messages`, `whatsapp_sessions`, `industry_dictionary`, and `global_dictionary`
+    intentionally have RLS disabled — they are service-role-only tables. `industry_dictionary` and
+    `global_dictionary` are read-only for authenticated users (via RLS SELECT policy on auth.role() = 'authenticated'),
+    writes go through `adminClient` only. BEFORE GOING TO PRODUCTION: audit every query touching these
+    tables and confirm none use the anon key for writes.
+12. **Auth claims (`org_id`, `role`) live in `app_metadata`, NOT `user_metadata`.** `user_metadata` is
+    self-editable by the user from the browser; `app_metadata` requires the service-role key, so users
+    cannot self-promote their role. Stamp it only via `adminClient.auth.admin.updateUserById()`.
+    `getCurrentUser()`, `middleware.ts`, and the RLS helpers (`_current_role()` / `_current_org_id()`)
+    read `app_metadata` with a `user_metadata` fallback during the migration window (the fallback is
+    removed once all users are re-stamped). Any future user-invite flow MUST set the invited user's
+    role in `app_metadata` server-side — never let the invited user choose their own role.
+13. **Platform admins** (VyaOps maintainers) are a separate cross-org plane in the `platform_admins`
+    table (RLS enabled, NO policies → service-role only). They are NOT org-scoped. The `(admin)` route
+    group is gated by `getPlatformAdmin()` (authoritative DB lookup) plus an `app_metadata.is_platform_admin`
+    fast path in middleware. Platform-admin mutations write `audit_log` with `changed_by_source = 'platform_admin'`.
+    NEVER gate platform-admin access on a tenant `role` (`owner` etc.) — tenants must never reach `/admin`.
 
 ---
 
@@ -152,6 +167,8 @@ npm run test:benchmark         # AI eval benchmark suite
 
 ## AI Integration Rules
 
+- **DIALECT DICTIONARY (Layer 0):** Before any AI call, raw messages pass through the 5-tier dialect dictionary (`src/lib/ai/dialect-lookup.ts`). Lookup order: Tier 4 (org) → Tier 3 (industry) → Tier 5 (global pool) → Tier 2 (business JSON) → Tier 1 (Gujarati language JSON). Only unresolved tokens reach the AI. See `docs/ai/DIALECT_DICTIONARY.md`.
+- **DIALECT LEARNING:** Owner corrections write to `org_dictionary` (Tier 4) via `src/lib/ai/dialect-learner.ts`. Cross-org patterns auto-promote to `global_dictionary` (Tier 5) and eventually `industry_dictionary` (Tier 3). See `docs/ai/DIALECT_DICTIONARY.md`.
 - All AI calls through model router (`src/lib/ai/model-router.ts`).
 - Router decides: DeepSeek (fast/cheap) vs Qwen 3.7 Max (complex).
 - Every AI output goes through eval gate (`src/lib/ai/eval-gate.ts`) before DB commit.
@@ -198,6 +215,7 @@ vyaops/
 │   ├── ai/
 │   │   ├── EVAL_LOOP.md
 │   │   ├── DATA_ALIGNMENT_ENGINE.md
+│   │   ├── DIALECT_DICTIONARY.md      # 5-tier dialect lookup system
 │   │   └── PROMPT_LIBRARY.md
 │   ├── security/
 │   │   ├── RLS_POLICIES.md
@@ -258,7 +276,9 @@ vyaops/
 │   │   │   ├── deepseek.ts
 │   │   │   ├── openrouter.ts
 │   │   │   ├── model-router.ts
-│   │   │   └── eval-gate.ts
+│   │   │   ├── eval-gate.ts
+│   │   │   ├── dialect-lookup.ts      # 5-tier dialect dictionary lookup
+│   │   │   └── dialect-learner.ts     # Correction → dictionary learning loop
 │   │   ├── whatsapp/
 │   │   │   ├── meta-cloud-api.ts
 │   │   │   ├── templates.ts
@@ -282,6 +302,9 @@ vyaops/
 │   │   ├── features.ts               # Feature → tier map
 │   │   ├── industries/
 │   │   │   └── foundry.json
+│   │   ├── dialect/                   # Static dialect dictionaries (Tier 1 + 2)
+│   │   │   ├── universal.json         # Tier 1: Gujarati language base (~3000 entries)
+│   │   │   └── business.json          # Tier 2: Cross-industry business vocab (~200 entries)
 │   │   └── whatsapp-menus.ts
 │   ├── types/
 │   │   ├── database.ts               # Auto-generated from Supabase

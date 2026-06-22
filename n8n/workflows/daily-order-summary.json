@@ -1,0 +1,222 @@
+{
+  "name": "VyaOps — Daily Order Summary",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodes": [
+    {
+      "id": "node-01-cron",
+      "name": "Daily 8AM IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 0 8 * * *"
+            }
+          ]
+        }
+      },
+      "notes": "Runs daily at 08:00. Workflow timezone is Asia/Kolkata (see Settings), so this fires at 08:00 IST."
+    },
+
+    {
+      "id": "node-02-fetch-summaries",
+      "name": "Fetch Daily Summaries",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [480, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.APP_URL }}/api/orders/daily-summary",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "options": {
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 2000 },
+          "timeout": 30000
+        }
+      },
+      "notes": "GET /api/orders/daily-summary (internal auth). Returns { summaries: [...], meta } ACROSS ALL ORGS. The endpoint does all date math (IST), fetches yesterday's orders, today's in-production orders, and overdue invoices, returns STRUCTURED fields (date_label, counts, formatted ₹ values) + owner phone + language_preference, and ALREADY drops orgs that opted out (whatsapp_proactive_enabled=false), have no owner phone, or have no data — so each item here is ready to map into the template."
+    },
+
+    {
+      "id": "node-03-split",
+      "name": "Split Into Summaries",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [720, 300],
+      "parameters": {
+        "fieldToSplitOut": "summaries",
+        "options": {}
+      },
+      "notes": "Fans the summaries array out to one item per org. This is the last node whose OUTPUT carries full summary fields (organization_id, owner_phone, language_preference, structured template fields) and is 1:1 with the source, so downstream nodes reference it by name for item-stable lineage."
+    },
+
+    {
+      "id": "node-04-has-data-guard",
+      "name": "Has Data",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [960, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c0",
+              "leftValue": "={{ $json.has_data }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            },
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.owner_phone }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            },
+            {
+              "id": "c2",
+              "leftValue": "={{ $json.language_preference }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Defense-in-depth guard for spec rule 5 ('only send if there's actual data'), the 'must have an owner phone' rule, and a non-empty language_preference (so template selection never falls through to a null locale). The endpoint already enforces all three (it filters whatsapp_proactive_enabled, drops no-owner/no-data orgs, and defaults locale to 'en'); this ensures we never send an empty or mis-localised summary even if the contract changes."
+    },
+
+    {
+      "id": "node-05-send",
+      "name": "Send Daily Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1200, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/whatsapp/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.owner_phone, type: 'template', orgId: $json.organization_id, template: { name: $json.language_preference === 'gu' ? 'daily_morning_summary_gujarati' : 'daily_morning_summary', language: { code: $json.language_preference === 'gu' ? 'gu' : 'en' }, components: [{ type: 'body', parameters: [{ type: 'text', text: String($json.date_label) }, { type: 'text', text: String($json.yesterday_order_count) }, { type: 'text', text: String($json.yesterday_value_formatted) }, { type: 'text', text: String($json.production_count) }, { type: 'text', text: String($json.overdue_count) }, { type: 'text', text: String($json.overdue_total_formatted) }] }] } }) }}",
+        "options": {
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 2000 },
+          "timeout": 30000
+        }
+      },
+      "notes": "POST /api/whatsapp/send (internal auth) → Meta Cloud API. Sends the Meta-approved daily_morning_summary template (Utility category, delivers outside the 24h window) to the org OWNER's WhatsApp number — never a customer chat (Rule A). Maps the endpoint's six structured fields into body variables {{1}}–{{6}}: date_label, yesterday_order_count, yesterday_value_formatted, production_count, overdue_count, overdue_total_formatted. Picks the _gujarati template + gu language code when language_preference === 'gu', else English."
+    },
+
+    {
+      "id": "node-06-log",
+      "name": "Log Summary Sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1440, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/analytics/log-intent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ /* the Send node returns only { sent, messageId }, so org + phone are read from Split — the last un-filtered 1:1 node — for index-stable paired-item lineage */ JSON.stringify({ orgId: $('Split Into Summaries').item.json.organization_id, chatPhone: $('Split Into Summaries').item.json.owner_phone, messageType: 'daily_summary_sent', timestamp: new Date().toISOString() }) }}",
+        "options": {
+          "retry": { "enabled": true, "maxTries": 2, "waitBetweenTries": 1000 }
+        }
+      },
+      "notes": "POST /api/analytics/log-intent (internal auth) → PostHog. Privacy-safe: orgId + masked phone + event type only, never order counts or amounts (CLAUDE.md security rule #8). Reads org/phone from $('Split Into Summaries').item, not the Send response which strips them."
+    },
+
+    {
+      "id": "node-07-error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [240, 620],
+      "parameters": {},
+      "notes": "Set this workflow as its own Error Workflow in Settings > Error Workflow."
+    },
+
+    {
+      "id": "node-08-log-error",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [480, 620],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/errors/log",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source: 'n8n_daily_order_summary', error: $json.error?.message, workflow: $json.workflow?.name, node: $json.execution?.lastNodeExecuted, executionId: $json.execution?.id, timestamp: new Date().toISOString() }) }}",
+        "options": {}
+      },
+      "notes": "Logs failures to Sentry via /api/errors/log. Never messages a customer chat."
+    }
+  ],
+
+  "connections": {
+    "Daily 8AM IST": {
+      "main": [[{ "node": "Fetch Daily Summaries", "type": "main", "index": 0 }]]
+    },
+    "Fetch Daily Summaries": {
+      "main": [[{ "node": "Split Into Summaries", "type": "main", "index": 0 }]]
+    },
+    "Split Into Summaries": {
+      "main": [[{ "node": "Has Data", "type": "main", "index": 0 }]]
+    },
+    "Has Data": {
+      "main": [[{ "node": "Send Daily Summary", "type": "main", "index": 0 }]]
+    },
+    "Send Daily Summary": {
+      "main": [[{ "node": "Log Summary Sent", "type": "main", "index": 0 }]]
+    },
+    "Error Trigger": {
+      "main": [[{ "node": "Log Error", "type": "main", "index": 0 }]]
+    }
+  },
+
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "id": "vyaops-daily-order-summary",
+  "tags": [
+    { "id": "vyaops", "name": "vyaops" },
+    { "id": "orders", "name": "orders" },
+    { "id": "cron", "name": "cron" }
+  ],
+  "pinData": {}
+}

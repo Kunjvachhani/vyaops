@@ -19,7 +19,7 @@ export type AuditEntityType =
   | 'user'
   | 'organization'
 
-export type AuditSource = 'whatsapp' | 'web' | 'api' | 'scheduled' | 'system'
+export type AuditSource = 'whatsapp' | 'web' | 'api' | 'scheduled' | 'system' | 'platform_admin'
 
 export type Change = {
   field: string

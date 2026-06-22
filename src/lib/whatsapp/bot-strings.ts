@@ -10,6 +10,9 @@
 export type Locale = 'en' | 'hi' | 'gu'
 
 export type BotStrings = {
+  duplicateOrder: {
+    notice: (orderNumber: string) => string
+  }
   orderDraft: {
     title: string
     urgentSuffix: string
@@ -51,6 +54,9 @@ export type BotStrings = {
 
 const STRINGS: Record<Locale, BotStrings> = {
   en: {
+    duplicateOrder: {
+      notice: (orderNumber) => `ℹ️ Order ${orderNumber} already exists — no duplicate created.`,
+    },
     orderDraft: {
       title: '📋 Order Draft',
       urgentSuffix: ' | Urgent',
@@ -69,11 +75,11 @@ const STRINGS: Record<Locale, BotStrings> = {
       instructions: 'Reply "ok" to confirm · /cancel to discard',
     },
     cancelDraft: {
-      title: '📋 Cancellation Draft',
+      title: '⚠️ Cancel Order?',
       orderLabel: 'Order',
       customerLabel: 'Customer',
-      producedWarning: (n) => `⚠️ ${n} pcs already produced`,
-      instructions: 'Reply "ok" to cancel order · /cancel to keep order',
+      producedWarning: (n) => `⚠️ ${n} pcs already produced — this work will be wasted`,
+      instructions: 'Reply YES to confirm cancellation · /cancel to keep order',
     },
     status: {
       header: '📦 Your Orders',
@@ -91,6 +97,9 @@ const STRINGS: Record<Locale, BotStrings> = {
   },
 
   gu: {
+    duplicateOrder: {
+      notice: (orderNumber) => `ℹ️ ઓર્ડર ${orderNumber} પહેલેથી છે — ડુપ્લિકેટ બનાવ્યો નથી.`,
+    },
     orderDraft: {
       title: '📋 ઓર્ડર ડ્રાફ્ટ',
       urgentSuffix: ' | અર્જન્ટ',
@@ -109,11 +118,11 @@ const STRINGS: Record<Locale, BotStrings> = {
       instructions: '"ok" ટાઇપ કરો કન્ફર્મ · /cancel રદ',
     },
     cancelDraft: {
-      title: '📋 કેન્સલ ડ્રાફ્ટ',
+      title: '⚠️ ઓર્ડર કેન્સલ?',
       orderLabel: 'ઓર્ડર',
       customerLabel: 'ગ્રાહક',
-      producedWarning: (n) => `⚠️ ${n} pcs બની ગઈ છે`,
-      instructions: '"ok" ઓર્ડર કેન્સલ · /cancel ઓર્ડર રાખો',
+      producedWarning: (n) => `⚠️ ${n} pcs બની ગઈ છે — આ કામ વ્યર્થ જશે`,
+      instructions: 'YES ટાઇપ કરો કેન્સલ કન્ફર્મ · /cancel ઓર્ડર રાખો',
     },
     status: {
       header: '📦 તમારા ઓર્ડર',
@@ -131,6 +140,9 @@ const STRINGS: Record<Locale, BotStrings> = {
   },
 
   hi: {
+    duplicateOrder: {
+      notice: (orderNumber) => `ℹ️ ऑर्डर ${orderNumber} पहले से मौजूद है — डुप्लिकेट नहीं बनाया।`,
+    },
     orderDraft: {
       title: '📋 ऑर्डर ड्राफ्ट',
       urgentSuffix: ' | अर्जेंट',
@@ -149,11 +161,11 @@ const STRINGS: Record<Locale, BotStrings> = {
       instructions: '"ok" कन्फर्म · /cancel रद्द',
     },
     cancelDraft: {
-      title: '📋 कैंसल ड्राफ्ट',
+      title: '⚠️ ऑर्डर कैंसल?',
       orderLabel: 'ऑर्डर',
       customerLabel: 'ग्राहक',
-      producedWarning: (n) => `⚠️ ${n} pcs बन चुके हैं`,
-      instructions: '"ok" ऑर्डर कैंसल · /cancel ऑर्डर रखें',
+      producedWarning: (n) => `⚠️ ${n} pcs बन चुके हैं — यह काम बर्बाद होगा`,
+      instructions: 'YES टाइप करें कैंसल कन्फर्म · /cancel ऑर्डर रखें',
     },
     status: {
       header: '📦 आपके ऑर्डर',

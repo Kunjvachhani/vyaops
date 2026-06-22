@@ -47,6 +47,8 @@ whatsapp_display_number     TEXT                     -- Fallback: human-readable
 whatsapp_connected          BOOLEAN DEFAULT FALSE
 auto_mode_enabled           BOOLEAN DEFAULT FALSE    -- AI auto-reply toggle (deprecated in new model — kept for future use)
 language_preference TEXT NOT NULL DEFAULT 'gu'        -- gu | hi | en
+whatsapp_proactive_enabled  BOOLEAN NOT NULL DEFAULT TRUE  -- receives scheduled notifications (summary, reminders, compliance)
+whatsapp_proactive_set_at   TIMESTAMPTZ                    -- when the preference was last explicitly changed
 timezone            TEXT NOT NULL DEFAULT 'Asia/Kolkata'
 onboarded_at        TIMESTAMPTZ
 created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -316,7 +318,7 @@ table_name          TEXT NOT NULL
 record_id           UUID NOT NULL
 action              TEXT NOT NULL                    -- CREATE | UPDATE | SOFT_DELETE | RESTORE
 changed_by          UUID                             -- user ID or NULL for system/bot
-changed_by_source   TEXT NOT NULL                    -- whatsapp | web | api | scheduled | system
+changed_by_source   TEXT NOT NULL                    -- whatsapp | web | api | scheduled | system | platform_admin
 old_values          JSONB                            -- previous state (NULL for CREATE)
 new_values          JSONB                            -- new state (NULL for SOFT_DELETE)
 ip_address          TEXT
@@ -431,6 +433,85 @@ created_at, updated_at, deleted_at (standard)
 
 ---
 
+## TABLE: industry_dictionary
+Platform-wide industry jargon lookup. Seeded with 50 Gujarat MSME segments. No organization_id — shared resource.
+```
+id                  UUID PK
+term                TEXT NOT NULL              -- the Gujlish/Hindi/phonetic term
+term_normalized     TEXT NOT NULL              -- lowercase, stripped, for dedup
+canonical           TEXT NOT NULL              -- resolved English meaning
+category            TEXT NOT NULL              -- product | process | equipment | material | unit | defect
+industry_segment    TEXT NOT NULL              -- foundry | textiles | ceramics | chemicals | ...
+language            TEXT NOT NULL DEFAULT 'gujlish'  -- gu | hi | gujlish | hinglish | en
+confidence          NUMERIC(3,2) DEFAULT 1.00 -- 1.00=curated, <1=auto-promoted
+source              TEXT NOT NULL DEFAULT 'seed' -- seed | promotion | manual
+promotion_count     INTEGER DEFAULT 0
+is_active           BOOLEAN DEFAULT TRUE
+created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+**Unique:** `UNIQUE(term_normalized, industry_segment) WHERE is_active = TRUE`
+**Index:** `GIN(to_tsvector('simple', term))` for full-text search.
+**RLS:** DISABLED. Read-only for all authenticated users. Writes via service-role only (promotion logic + admin).
+
+## TABLE: org_dictionary
+Per-org custom dialect/alias mappings. Populated during onboarding + owner corrections.
+```
+id                  UUID PK
+organization_id     UUID FK → organizations(id)
+term                TEXT NOT NULL
+term_normalized     TEXT NOT NULL
+canonical           TEXT NOT NULL
+category            TEXT NOT NULL              -- product | customer | process | custom
+entity_id           UUID                       -- FK to products(id) or customers(id)
+entity_type         TEXT                       -- product | customer | vendor
+source              TEXT NOT NULL DEFAULT 'onboarding' -- onboarding | correction | manual
+confidence          NUMERIC(3,2) DEFAULT 1.00
+is_active           BOOLEAN DEFAULT TRUE
+created_at, updated_at, deleted_at (standard)
+```
+**Unique:** `UNIQUE(organization_id, term_normalized) WHERE deleted_at IS NULL AND is_active = TRUE`
+**RLS:** ENABLED. Standard tenant isolation.
+
+## TABLE: global_dictionary
+Crowd-sourced word→meaning mappings. No org-identifying data. Platform's collective intelligence.
+```
+id                  UUID PK
+term                TEXT NOT NULL
+term_normalized     TEXT NOT NULL
+canonical           TEXT NOT NULL
+category            TEXT NOT NULL              -- product | process | unit | general
+language            TEXT NOT NULL DEFAULT 'gujlish'
+taught_by_count     INTEGER NOT NULL DEFAULT 1
+first_seen_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+last_confirmed_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+confidence          NUMERIC(3,2) DEFAULT 0.80
+is_active           BOOLEAN DEFAULT TRUE
+created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+**Unique:** `UNIQUE(term_normalized, canonical) WHERE is_active = TRUE`
+**Index:** `(confidence DESC)` for ranked lookups.
+**RLS:** DISABLED. Read-only for authenticated users. Writes via service-role only.
+
+## TABLE: platform_admins
+VyaOps platform maintainers (founders/support). A separate cross-org auth plane — NOT org-scoped.
+This is a `system_*`-style table: it has NO `organization_id` and NO `updated_at`/`deleted_at`
+(revocation is via `revoked_at`, not the soft-delete contract).
+```
+id           UUID PK DEFAULT gen_random_uuid()
+user_id      UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE
+label        TEXT NOT NULL DEFAULT ''         -- human note, e.g. "Kunj — founder"
+added_by     UUID REFERENCES auth.users(id)   -- NULL for the seed row
+created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+revoked_at   TIMESTAMPTZ                       -- soft-revoke (preserve audit trail)
+```
+**Unique:** `UNIQUE(user_id)`
+**RLS:** ENABLED with NO policies → service-role only (anon/authenticated have zero access).
+Membership check: `getPlatformAdmin()` (`src/lib/supabase/platform-admin.ts`) via service-role.
+Fast path: `app_metadata.is_platform_admin = true` stamped on the auth user (gates `/admin` in middleware).
+Seed the first row manually after signup (see migration `20260622000003_create_platform_admins.sql`).
+
 ## RELATIONSHIP DIAGRAM
 ```
 organizations (tenant root)
@@ -449,10 +530,14 @@ organizations (tenant root)
   ├── sop_documents (many)
   ├── feature_addons (many)
   ├── billing_events (many)
+  ├── org_dictionary (many, per-org dialect terms, RLS)
   ├── audit_log (many, append-only, NO RLS)
   ├── whatsapp_messages (many, append-only)
   ├── whatsapp_sessions (one live per sender, NO RLS)
   └── eval_benchmark (global, not per-org)
+
+industry_dictionary (platform-wide, NO RLS, service-role writes)
+global_dictionary (platform-wide, NO RLS, service-role writes)
 ```
 
 ## SEQUENCE GENERATORS

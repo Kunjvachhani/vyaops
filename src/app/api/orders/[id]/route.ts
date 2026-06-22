@@ -5,6 +5,7 @@ import type { Database } from '@/types/database'
 import { diffChanges, logAudit } from '@/lib/utils/audit'
 import { ORDER_STATUSES, STATUS_TRANSITIONS, updateOrderSchema } from '@/lib/validations/order'
 import type { OrderStatus } from '@/lib/validations/order'
+import { softDelete, SoftDeleteError } from '@/lib/utils/soft-delete'
 
 type OrderRow = Database['public']['Tables']['orders']['Row']
 type OrderUpdate = Database['public']['Tables']['orders']['Update']
@@ -182,4 +183,33 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
   })
 
   return NextResponse.json({ data: updated })
+}
+
+// DELETE /api/orders/[id]
+// Soft-deletes the order (stamps deleted_at, audited). Never hard deletes.
+// Requires: owner or manager role. Restore via POST /api/admin/restore.
+export async function DELETE(req: NextRequest, { params }: RouteContext) {
+  const { id } = await params
+  const user = await getCurrentUser()
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, { status: 401 })
+  }
+  if (user.role === 'worker' || user.role === 'viewer') {
+    return NextResponse.json({ error: 'Insufficient permissions', code: 'FORBIDDEN' }, { status: 403 })
+  }
+
+  try {
+    await softDelete('orders', id, user.org_id, user.id, { ip: getIp(req) })
+  } catch (err) {
+    if (err instanceof SoftDeleteError) {
+      if (err.code === 'NOT_FOUND' || err.code === 'ALREADY_DELETED') {
+        return NextResponse.json({ error: 'Order not found', code: 'NOT_FOUND' }, { status: 404 })
+      }
+      console.error('[DELETE /api/orders/[id]]', err)
+      return NextResponse.json({ error: 'Failed to delete order', code: 'DB_ERROR' }, { status: 500 })
+    }
+    throw err
+  }
+
+  return NextResponse.json({ data: { id, table: 'orders', deleted: true } })
 }

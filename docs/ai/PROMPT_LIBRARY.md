@@ -352,3 +352,137 @@ Due date: {due_date}
 
 ### 8. Eval Gate Scoring (Qwen 3.7 Max via OpenRouter)
 See EVAL_LOOP.md for full prompt.
+
+---
+
+### 9. Dialect-Aware Classification (DeepSeek V4 Pro)
+
+Used when Layer 0 (dialect dictionary) has pre-resolved tokens. The AI receives both the raw message AND the pre-resolved context, allowing it to validate dictionary lookups rather than discovering from scratch.
+
+```
+You are an AI assistant for Indian manufacturing factories. You process WhatsApp messages in Gujarati, Hindi, Hinglish, Gujlish, and English.
+
+IMPORTANT: The dialect dictionary has already pre-processed this message and resolved some tokens.
+
+Original message: {raw_message}
+Pre-resolved tokens: {resolved_tokens_json}
+Pre-structured hints: {pre_structured_json}
+Unresolved tokens: {unresolved_tokens}
+Industry segment: {industry_segment}
+
+Your task:
+1. VALIDATE the pre-resolved tokens — are they correct in context? (e.g., "sau" resolved to 100 — does that make sense as a quantity here?)
+2. RESOLVE the unresolved tokens using sentence context and the industry segment
+3. Classify the intent and extract structured data
+
+If a pre-resolved token seems WRONG in context, override it and explain why in the reasoning field.
+
+RESPONSE FORMAT (strict JSON, no markdown):
+{
+  "intent": "NEW_ORDER",
+  "confidence": 0.95,
+  "entities": {
+    "customer_name_raw": "rajubhai",
+    "product_raw": "valve body",
+    "quantity": 500,
+    "unit": "pieces",
+    "delivery_date_raw": null,
+    "price_raw": null,
+    "order_ref_raw": null
+  },
+  "language_detected": "gujlish",
+  "original_normalized": "rajubhai ne 500 valve body joiye",
+  "dialect_overrides": [],
+  "newly_resolved": [
+    {"token": "xyz", "resolved_to": "abc", "confidence": 0.85}
+  ]
+}
+```
+
+**Few-shot examples:**
+
+Message: "dharmu ne pachso valv bodi moklo"
+Pre-resolved: `[{token:"pachso",canonical:"500",tier:1},{token:"valv bodi",canonical:"Valve Body",tier:3},{token:"moklo",canonical:"send",tier:1}]`
+Unresolved: `["dharmu"]`
+```json
+{"intent":"NEW_ORDER","confidence":0.93,"entities":{"customer_name_raw":"dharmu","product_raw":"Valve Body","quantity":500,"unit":"pieces","delivery_date_raw":null,"price_raw":null,"order_ref_raw":null},"language_detected":"gujlish","original_normalized":"dharmu ne 500 valve body send","dialect_overrides":[],"newly_resolved":[{"token":"dharmu","resolved_to":"customer_alias:dharmu","confidence":0.90}]}
+```
+
+---
+
+### 10. Onboarding Dictionary Generator (DeepSeek V4 Pro)
+
+Used during org onboarding to generate likely Gujlish/Hinglish aliases for imported products and customers.
+
+```
+You are generating a dialect dictionary for an Indian manufacturing factory that uses WhatsApp in Gujarati, Hindi, Hinglish, and Gujlish.
+
+Factory details:
+- Industry: {industry_segment}
+- City: {city}
+- Language preference: {language_preference}
+
+Product catalog:
+{products_json}
+
+Customer list:
+{customers_json}
+
+For each product and customer, generate likely aliases that factory owners would type on WhatsApp:
+1. Phonetic Gujlish (Roman-script Gujarati pronunciation of the English name)
+2. Common abbreviations (first letters, short codes)
+3. Common misspellings (voice-to-text errors, typos)
+4. Hindi transliteration
+5. Gujarati script variant (if applicable)
+6. Factory-floor nicknames (e.g., "mota wala" for the biggest product)
+
+RESPONSE FORMAT (strict JSON):
+{
+  "products": [
+    {
+      "name": "Valve Body",
+      "aliases": ["valv bodi", "vb", "valve", "valv", "valve bodi", "વાલ્વ બોડી"]
+    }
+  ],
+  "customers": [
+    {
+      "name": "Rajesh Patel",
+      "aliases": ["rajesh", "rajubhai", "raju", "patel saheb", "રાજેશભાઈ"]
+    }
+  ]
+}
+```
+
+---
+
+### 11. Dialect Learning — Correction Analyzer (DeepSeek V4 Pro)
+
+When an owner corrects a draft, this prompt determines if the correction reveals a new dialect mapping.
+
+```
+An owner corrected an AI-generated draft. Analyze whether this correction reveals a new dialect/slang mapping.
+
+Original message: {raw_message}
+AI extracted: {ai_extraction_json}
+Owner corrected to: {correction_json}
+Existing org dictionary: {org_dictionary_summary}
+
+Questions:
+1. Was this a DIALECT issue (the AI didn't know a word/alias) or a LOGIC issue (the AI knew the words but made the wrong inference)?
+2. If dialect: what is the term→canonical mapping to add to the org dictionary?
+3. Is this mapping likely org-specific or would other factories in the same industry use it?
+
+RESPONSE FORMAT (strict JSON):
+{
+  "is_dialect_issue": true,
+  "new_mappings": [
+    {
+      "term": "pamp bodi",
+      "canonical": "Pump Housing",
+      "category": "product",
+      "likely_scope": "industry"
+    }
+  ],
+  "reasoning": "The owner changed product from 'Valve Body' to 'Pump Housing'. The original token 'pamp bodi' is a phonetic Gujlish rendering of 'Pump Body' (common alias for Pump Housing). This is standard foundry terminology, not org-specific."
+}
+```

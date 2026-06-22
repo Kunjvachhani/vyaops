@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   const { message, orgId } = parsed.data
 
   try {
-    const [customersRes, productsRes, vendorsRes] = await Promise.all([
+    const [customersRes, productsRes, vendorsRes, orgRes] = await Promise.all([
       adminClient
         .from('customers')
         .select('id, name')
@@ -50,10 +50,16 @@ export async function POST(request: NextRequest) {
         .select('id, name')
         .eq('organization_id', orgId)
         .is('deleted_at', null),
+      adminClient
+        .from('organizations')
+        .select('industry_config')
+        .eq('id', orgId)
+        .maybeSingle(),
     ])
 
     const result = await routeAndProcess(message, {
       orgId,
+      industrySegment: orgRes.data?.industry_config ?? undefined,
       customers: customersRes.data ?? [],
       products: productsRes.data ?? [],
       vendors: vendorsRes.data ?? [],

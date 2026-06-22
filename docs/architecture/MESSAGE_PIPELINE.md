@@ -232,9 +232,10 @@ No greetings, no auto-replies, no "I didn't understand."
 ---
 
 ## Scheduled Messages (n8n cron — unchanged)
-| Time | Message | Tier |
-|------|---------|------|
-| 7:30 AM | Production plan for today | tier_2+ |
-| 9:00 AM | Overdue invoice summary | tier_1+ |
-| 7:00 PM | Production summary + inventory snapshot | tier_2+ |
-| 6:00 PM | Open orders summary | tier_1+ |
+| Time | Workflow | Message | Tier |
+|------|----------|---------|------|
+| 8:00 AM | daily-order-summary | Yesterday orders + today production + overdue invoices | tier_1+ |
+| 8:00 AM | compliance-reminder | Upcoming compliance deadlines | tier_3 |
+| 10:00 AM | payment-reminder | Tiered overdue invoice reminders (to customers) | tier_1+ |
+| 7:00 PM | daily-evening-summary | Production summary + inventory snapshot | tier_2+ |
+| 7:00 PM | low-stock-alert | Inventory below reorder level | tier_2+ |

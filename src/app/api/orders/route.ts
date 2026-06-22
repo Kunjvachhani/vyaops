@@ -150,11 +150,15 @@ export async function POST(req: NextRequest) {
     parsed.data
   const total_amount_paise = quantity * unit_price_paise
 
-  // Idempotency key: SHA-256(org_id + customer_id + product_id + quantity + YYYY-MM-DDTHH)
+  // Idempotency key: caller-supplied X-Idempotency-Key header takes precedence;
+  // falls back to SHA-256(org_id:customer_id:product_id:quantity:YYYY-MM-DDTHH).
+  const callerKey = req.headers.get('x-idempotency-key')?.trim()
   const dateHour = new Date().toISOString().slice(0, 13)
-  const idempotencyKey = createHash('sha256')
-    .update(`${user.org_id}:${customer_id}:${product_id}:${quantity}:${dateHour}`)
-    .digest('hex')
+  const idempotencyKey = callerKey
+    ? createHash('sha256').update(`${user.org_id}:${callerKey}`).digest('hex')
+    : createHash('sha256')
+        .update(`${user.org_id}:${customer_id}:${product_id}:${quantity}:${dateHour}`)
+        .digest('hex')
 
   const supabase = await createClient()
 

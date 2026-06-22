@@ -154,14 +154,122 @@
         "orderNumber": "Order #",
         "date": "Date",
         "status": "Status",
-        "by": "via"
+        "by": "via",
+        "viewInvoice": "View Invoice",
+        "backwardStatusTitle": "Change Status?",
+        "backwardStatusDesc": "Going back to \"{status}\" may reset production data.",
+        "backwardStatusConfirm": "Change Status",
+        "revertTo": "Revert to {status}"
       }
     },
     "invoices": {
       "title": "Invoices",
       "description": "Create, send, and track GST-compliant invoices for all your customers.",
-      "sprint": "Building in Sprint 3",
-      "placeholder": "Invoice management will be available here once Sprint 3 is complete."
+      "newInvoice": "Create Invoice",
+      "searchPlaceholder": "Search invoice #...",
+      "exportCsv": "Export CSV",
+      "allStatuses": "All",
+      "noInvoices": "No invoices found.",
+      "columns": {
+        "invoiceNumber": "Invoice #",
+        "customer": "Customer",
+        "amount": "Amount",
+        "status": "Status",
+        "dueDate": "Due Date",
+        "actions": "Actions"
+      },
+      "status": {
+        "draft": "Draft",
+        "sent": "Sent",
+        "paid": "Paid",
+        "partially_paid": "Partially Paid",
+        "overdue": "Overdue",
+        "cancelled": "Cancelled"
+      },
+      "summary": {
+        "outstanding": "Total Outstanding",
+        "overdue": "Overdue",
+        "paidThisMonth": "Paid This Month",
+        "unpaidInvoices": "{count} unpaid"
+      },
+      "createDialog": {
+        "title": "Create Invoice",
+        "step": "Step {step} of 2",
+        "step1Title": "Select Order",
+        "step2Title": "Review & Adjust",
+        "searchOrder": "Search completed orders...",
+        "noOrders": "No completed orders awaiting an invoice.",
+        "order": "Order",
+        "customer": "Customer",
+        "product": "Product",
+        "taxRate": "GST Rate (%)",
+        "dueDate": "Due Date",
+        "subtotal": "Subtotal",
+        "tax": "GST",
+        "total": "Total",
+        "notes": "Notes",
+        "notesPlaceholder": "Payment terms, remarks...",
+        "previewPdf": "Preview PDF",
+        "generating": "Generating...",
+        "creating": "Creating...",
+        "create": "Create Invoice"
+      },
+      "detail": {
+        "invoiceInfo": "Invoice Info",
+        "lineItems": "Line Items",
+        "customer": "Customer",
+        "order": "Order",
+        "date": "Date",
+        "dueDate": "Due Date",
+        "status": "Status",
+        "product": "Product",
+        "qty": "Qty",
+        "unitPrice": "Unit Price",
+        "subtotal": "Subtotal",
+        "tax": "GST",
+        "total": "Total",
+        "paid": "Paid",
+        "balance": "Balance Due",
+        "notes": "Notes",
+        "downloadPdf": "Download PDF",
+        "sendWhatsapp": "Send via WhatsApp",
+        "recordPayment": "Record Payment",
+        "markSent": "Mark as Sent",
+        "cancelInvoice": "Cancel Invoice",
+        "cancelInvoiceHint": "This will cancel invoice {number}. The invoice will be marked cancelled and no further payments can be recorded.",
+        "paymentHistory": "Payment History",
+        "noPayments": "No payments recorded yet.",
+        "auditTrail": "Audit Trail",
+        "noAudit": "No audit entries yet.",
+        "by": "via",
+        "downloading": "Downloading...",
+        "sending": "Sending...",
+        "sentViaWhatsapp": "Sent on WhatsApp",
+        "method": "Method",
+        "reference": "Ref"
+      },
+      "paymentDialog": {
+        "title": "Record Payment",
+        "outstanding": "Outstanding",
+        "amount": "Amount (₹)",
+        "date": "Payment Date",
+        "method": "Payment Method",
+        "reference": "Reference Number",
+        "referencePlaceholder": "UTR / cheque no...",
+        "notes": "Notes",
+        "recording": "Recording...",
+        "record": "Record Payment",
+        "methods": {
+          "upi": "UPI",
+          "bank_transfer": "Bank Transfer",
+          "cash": "Cash",
+          "cheque": "Cheque"
+        }
+      },
+      "messages": {
+        "sendSuccess": "Invoice sent on WhatsApp.",
+        "paymentRecorded": "Payment recorded."
+      }
     },
     "customers": {
       "title": "Customers",
@@ -251,7 +359,18 @@
       "title": "Settings",
       "description": "Manage your organisation profile, billing, team members, and integrations.",
       "sprint": "Building in Sprint 7",
-      "placeholder": "Settings will be available here once Sprint 7 is complete."
+      "placeholder": "Settings will be available here once Sprint 7 is complete.",
+      "tabs": {
+        "preferences": "Preferences"
+      },
+      "preferences": {
+        "whatsappTitle": "WhatsApp Notifications",
+        "notificationsLabel": "Daily order summaries, payment reminders, and compliance alerts via WhatsApp",
+        "notificationsHelp": "You'll receive these at your registered WhatsApp number. Turn off to stop all proactive messages.",
+        "lastChanged": "Last changed: {when} IST",
+        "usingDefault": "Using default",
+        "updateError": "Couldn't save your preference. Please try again."
+      }
     }
   },
   "featureGate": {
@@ -286,5 +405,60 @@
   "upsell": {
     "available": "Available on {tier} plan",
     "upgrade": "Upgrade to unlock"
+  },
+  "softDelete": {
+    "deleted": "Deleted.",
+    "undo": "Undo",
+    "restored": "Restored.",
+    "deleteFailed": "Could not delete. Please try again.",
+    "restoreFailed": "Could not undo. Please try again.",
+    "undoHint": "You can undo this for 30 seconds after deleting.",
+    "typeNameHint": "Type \"{label}\" to confirm"
+  },
+  "admin": {
+    "badge": "PLATFORM ADMIN",
+    "platformAdmin": "Platform admin",
+    "nav": {
+      "home": "Overview",
+      "recovery": "Recovery",
+      "exitToDashboard": "Exit to dashboard"
+    },
+    "home": {
+      "title": "Platform Overview",
+      "totalOrgs": "Organizations",
+      "totalUsers": "Users",
+      "recoveryCard": "Deleted records recovery",
+      "recoveryCardHint": "View and restore soft-deleted records across any org.",
+      "recentAudit": "Recent activity (last 50)",
+      "noAudit": "No audit entries yet.",
+      "col": {
+        "time": "Time",
+        "action": "Action",
+        "table": "Table",
+        "source": "Source",
+        "org": "Org"
+      }
+    },
+    "recovery": {
+      "title": "Deleted Records Recovery",
+      "description": "Select an organization and a table to view its soft-deleted records, then restore any of them. Restores are logged with source platform_admin.",
+      "org": "Organization",
+      "selectOrg": "Select an organization…",
+      "table": "Table",
+      "load": "Load",
+      "loading": "Loading…",
+      "loadFailed": "Could not load deleted records.",
+      "empty": "No deleted records found.",
+      "restore": "Restore",
+      "restoring": "Restoring…",
+      "restored": "Record restored.",
+      "restoreFailed": "Could not restore the record.",
+      "col": {
+        "record": "Record",
+        "id": "ID",
+        "deletedAt": "Deleted at",
+        "action": "Action"
+      }
+    }
   }
 }

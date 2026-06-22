@@ -180,6 +180,94 @@ export type Database = {
           },
         ]
       }
+      corrections: {
+        Row: {
+          benchmark_case_id: string | null
+          benchmarked: boolean
+          benchmarked_at: string | null
+          correct_extraction: Json
+          created_at: string
+          customer_phone: string | null
+          deleted_at: string | null
+          dialect_analysis: Json | null
+          dialect_processed_at: string | null
+          id: string
+          intent: string | null
+          is_dialect_issue: boolean | null
+          organization_id: string
+          original_message: string
+          pending_order_id: string | null
+          source: string
+          updated_at: string
+          user_id: string | null
+          wrong_extraction: Json
+        }
+        Insert: {
+          benchmark_case_id?: string | null
+          benchmarked?: boolean
+          benchmarked_at?: string | null
+          correct_extraction: Json
+          created_at?: string
+          customer_phone?: string | null
+          deleted_at?: string | null
+          dialect_analysis?: Json | null
+          dialect_processed_at?: string | null
+          id?: string
+          intent?: string | null
+          is_dialect_issue?: boolean | null
+          organization_id: string
+          original_message: string
+          pending_order_id?: string | null
+          source?: string
+          updated_at?: string
+          user_id?: string | null
+          wrong_extraction: Json
+        }
+        Update: {
+          benchmark_case_id?: string | null
+          benchmarked?: boolean
+          benchmarked_at?: string | null
+          correct_extraction?: Json
+          created_at?: string
+          customer_phone?: string | null
+          deleted_at?: string | null
+          dialect_analysis?: Json | null
+          dialect_processed_at?: string | null
+          id?: string
+          intent?: string | null
+          is_dialect_issue?: boolean | null
+          organization_id?: string
+          original_message?: string
+          pending_order_id?: string | null
+          source?: string
+          updated_at?: string
+          user_id?: string | null
+          wrong_extraction?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "corrections_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "corrections_pending_order_id_fkey"
+            columns: ["pending_order_id"]
+            isOneToOne: false
+            referencedRelation: "pending_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "corrections_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           address: string | null
@@ -345,6 +433,102 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      global_dictionary: {
+        Row: {
+          canonical: string
+          category: string
+          confidence: number
+          created_at: string
+          first_seen_at: string
+          id: string
+          is_active: boolean
+          language: string
+          last_confirmed_at: string
+          taught_by_count: number
+          term: string
+          term_normalized: string
+          updated_at: string
+        }
+        Insert: {
+          canonical: string
+          category: string
+          confidence?: number
+          created_at?: string
+          first_seen_at?: string
+          id?: string
+          is_active?: boolean
+          language?: string
+          last_confirmed_at?: string
+          taught_by_count?: number
+          term: string
+          term_normalized: string
+          updated_at?: string
+        }
+        Update: {
+          canonical?: string
+          category?: string
+          confidence?: number
+          created_at?: string
+          first_seen_at?: string
+          id?: string
+          is_active?: boolean
+          language?: string
+          last_confirmed_at?: string
+          taught_by_count?: number
+          term?: string
+          term_normalized?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      industry_dictionary: {
+        Row: {
+          canonical: string
+          category: string
+          confidence: number
+          created_at: string
+          id: string
+          industry_segment: string
+          is_active: boolean
+          language: string
+          promotion_count: number
+          source: string
+          term: string
+          term_normalized: string
+          updated_at: string
+        }
+        Insert: {
+          canonical: string
+          category: string
+          confidence?: number
+          created_at?: string
+          id?: string
+          industry_segment: string
+          is_active?: boolean
+          language?: string
+          promotion_count?: number
+          source?: string
+          term: string
+          term_normalized: string
+          updated_at?: string
+        }
+        Update: {
+          canonical?: string
+          category?: string
+          confidence?: number
+          created_at?: string
+          id?: string
+          industry_segment?: string
+          is_active?: boolean
+          language?: string
+          promotion_count?: number
+          source?: string
+          term?: string
+          term_normalized?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       inventory: {
         Row: {
@@ -664,6 +848,65 @@ export type Database = {
           },
         ]
       }
+      org_dictionary: {
+        Row: {
+          canonical: string
+          category: string
+          confidence: number
+          created_at: string
+          deleted_at: string | null
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          is_active: boolean
+          organization_id: string
+          source: string
+          term: string
+          term_normalized: string
+          updated_at: string
+        }
+        Insert: {
+          canonical: string
+          category: string
+          confidence?: number
+          created_at?: string
+          deleted_at?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          is_active?: boolean
+          organization_id: string
+          source?: string
+          term: string
+          term_normalized: string
+          updated_at?: string
+        }
+        Update: {
+          canonical?: string
+          category?: string
+          confidence?: number
+          created_at?: string
+          deleted_at?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          is_active?: boolean
+          organization_id?: string
+          source?: string
+          term?: string
+          term_normalized?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_dictionary_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           address: string | null
@@ -688,9 +931,11 @@ export type Database = {
           timezone: string
           updated_at: string
           whatsapp_connected: boolean
+          whatsapp_display_number: string | null
           whatsapp_phone: string | null
           whatsapp_phone_number_id: string | null
-          whatsapp_display_number: string | null
+          whatsapp_proactive_enabled: boolean
+          whatsapp_proactive_set_at: string | null
         }
         Insert: {
           address?: string | null
@@ -715,9 +960,11 @@ export type Database = {
           timezone?: string
           updated_at?: string
           whatsapp_connected?: boolean
+          whatsapp_display_number?: string | null
           whatsapp_phone?: string | null
           whatsapp_phone_number_id?: string | null
-          whatsapp_display_number?: string | null
+          whatsapp_proactive_enabled?: boolean
+          whatsapp_proactive_set_at?: string | null
         }
         Update: {
           address?: string | null
@@ -742,9 +989,11 @@ export type Database = {
           timezone?: string
           updated_at?: string
           whatsapp_connected?: boolean
+          whatsapp_display_number?: string | null
           whatsapp_phone?: string | null
           whatsapp_phone_number_id?: string | null
-          whatsapp_display_number?: string | null
+          whatsapp_proactive_enabled?: boolean
+          whatsapp_proactive_set_at?: string | null
         }
         Relationships: []
       }
@@ -804,6 +1053,116 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      pending_orders: {
+        Row: {
+          confirmed_order_id: string | null
+          created_at: string
+          customer_id: string | null
+          customer_phone: string
+          deleted_at: string | null
+          draft_message_id: string | null
+          expires_at: string
+          extraction: Json
+          id: string
+          intent: string
+          organization_id: string
+          source_message_id: string
+          state: string
+          target_order_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          confirmed_order_id?: string | null
+          created_at?: string
+          customer_id?: string | null
+          customer_phone: string
+          deleted_at?: string | null
+          draft_message_id?: string | null
+          expires_at?: string
+          extraction?: Json
+          id?: string
+          intent: string
+          organization_id: string
+          source_message_id: string
+          state?: string
+          target_order_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          confirmed_order_id?: string | null
+          created_at?: string
+          customer_id?: string | null
+          customer_phone?: string
+          deleted_at?: string | null
+          draft_message_id?: string | null
+          expires_at?: string
+          extraction?: Json
+          id?: string
+          intent?: string
+          organization_id?: string
+          source_message_id?: string
+          state?: string
+          target_order_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pending_orders_confirmed_order_id_fkey"
+            columns: ["confirmed_order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_orders_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_orders_target_order_id_fkey"
+            columns: ["target_order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_admins: {
+        Row: {
+          added_by: string | null
+          created_at: string
+          id: string
+          label: string
+          revoked_at: string | null
+          user_id: string
+        }
+        Insert: {
+          added_by?: string | null
+          created_at?: string
+          id?: string
+          label?: string
+          revoked_at?: string | null
+          user_id: string
+        }
+        Update: {
+          added_by?: string | null
+          created_at?: string
+          id?: string
+          label?: string
+          revoked_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       production_batches: {
         Row: {
@@ -1282,65 +1641,6 @@ export type Database = {
         }
         Relationships: []
       }
-      pending_orders: {
-        Row: {
-          id: string
-          organization_id: string
-          customer_id: string | null
-          customer_phone: string
-          intent: string
-          target_order_id: string | null
-          extraction: Json
-          state: string
-          source_message_id: string
-          draft_message_id: string | null
-          confirmed_order_id: string | null
-          expires_at: string
-          created_at: string
-          updated_at: string
-          deleted_at: string | null
-        }
-        Insert: {
-          id?: string
-          organization_id: string
-          customer_id?: string | null
-          customer_phone: string
-          intent: string
-          target_order_id?: string | null
-          extraction?: Json
-          state?: string
-          source_message_id: string
-          draft_message_id?: string | null
-          confirmed_order_id?: string | null
-          expires_at?: string
-          created_at?: string
-          updated_at?: string
-          deleted_at?: string | null
-        }
-        Update: {
-          id?: string
-          organization_id?: string
-          customer_id?: string | null
-          customer_phone?: string
-          intent?: string
-          target_order_id?: string | null
-          extraction?: Json
-          state?: string
-          source_message_id?: string
-          draft_message_id?: string | null
-          confirmed_order_id?: string | null
-          expires_at?: string
-          created_at?: string
-          updated_at?: string
-          deleted_at?: string | null
-        }
-        Relationships: [
-          { foreignKeyName: 'pending_orders_organization_id_fkey'; columns: ['organization_id']; referencedRelation: 'organizations'; referencedColumns: ['id'] },
-          { foreignKeyName: 'pending_orders_customer_id_fkey'; columns: ['customer_id']; referencedRelation: 'customers'; referencedColumns: ['id'] },
-          { foreignKeyName: 'pending_orders_target_order_id_fkey'; columns: ['target_order_id']; referencedRelation: 'orders'; referencedColumns: ['id'] },
-          { foreignKeyName: 'pending_orders_confirmed_order_id_fkey'; columns: ['confirmed_order_id']; referencedRelation: 'orders'; referencedColumns: ['id'] }
-        ]
-      }
       whatsapp_sessions: {
         Row: {
           created_at: string
@@ -1378,6 +1678,9 @@ export type Database = {
     Functions: {
       _current_org_id: { Args: never; Returns: string }
       _current_role: { Args: never; Returns: string }
+      generate_invoice_number: { Args: never; Returns: string }
+      generate_order_number: { Args: never; Returns: string }
+      generate_po_number: { Args: never; Returns: string }
     }
     Enums: {
       [_ in never]: never

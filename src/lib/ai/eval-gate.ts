@@ -109,5 +109,6 @@ export async function evaluateExtraction(
     reasoning: parsed.reasoning,
     failureCodes: parsed.failure_codes,
     decision,
+    usage: response.usage,
   }
 }

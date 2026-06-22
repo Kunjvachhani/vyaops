@@ -154,14 +154,124 @@
         "orderNumber": "ऑर्डर #",
         "date": "तारीख",
         "status": "स्थिति",
-        "by": "द्वारा"
+        "by": "द्वारा",
+        "viewInvoice": "चालान देखें",
+        "backwardStatusTitle": "स्थिति बदलें?",
+        "backwardStatusDesc": "\"{status}\" पर वापस जाने से प्रोडक्शन डेटा रीसेट हो सकता है।",
+        "backwardStatusConfirm": "स्थिति बदलें",
+        "revertTo": "{status} पर वापस जाएं"
       }
     },
     "invoices": {
       "title": "चालान",
       "description": "अपने सभी ग्राहकों के लिए GST-अनुपालक चालान बनाएं, भेजें और ट्रैक करें।",
-      "sprint": "Sprint 3 में बन रहा है",
-      "placeholder": "Sprint 3 पूरा होने के बाद चालान प्रबंधन यहाँ उपलब्ध होगा।"
+      "newInvoice": "चालान बनाएं",
+      "searchPlaceholder": "चालान # खोजें...",
+      "exportCsv": "CSV निर्यात करें",
+      "allStatuses": "सभी",
+      "noInvoices": "कोई चालान नहीं मिला।",
+      "columns": {
+        "invoiceNumber": "चालान #",
+        "customer": "ग्राहक",
+        "amount": "राशि",
+        "status": "स्थिति",
+        "dueDate": "नियत तिथि",
+        "actions": "कार्रवाई"
+      },
+      "status": {
+        "draft": "ड्राफ्ट",
+        "sent": "भेजा गया",
+        "paid": "भुगतान हुआ",
+        "partially_paid": "आंशिक भुगतान",
+        "overdue": "अतिदेय",
+        "cancelled": "रद्द"
+      },
+      "summary": {
+        "outstanding": "कुल बकाया",
+        "overdue": "अतिदेय",
+        "paidThisMonth": "इस माह प्राप्त",
+        "unpaidInvoices": "{count} बकाया"
+      },
+      "createDialog": {
+        "title": "चालान बनाएं",
+        "step": "चरण {step} / 2",
+        "step1Title": "ऑर्डर चुनें",
+        "step2Title": "समीक्षा और समायोजन",
+        "searchOrder": "पूर्ण ऑर्डर खोजें...",
+        "noOrders": "चालान की प्रतीक्षा में कोई पूर्ण ऑर्डर नहीं।",
+        "order": "ऑर्डर",
+        "customer": "ग्राहक",
+        "product": "उत्पाद",
+        "taxRate": "GST दर (%)",
+        "dueDate": "नियत तिथि",
+        "subtotal": "उप-योग",
+        "tax": "GST",
+        "total": "कुल",
+        "notes": "टिप्पणी",
+        "notesPlaceholder": "भुगतान शर्तें, टिप्पणी...",
+        "previewPdf": "PDF पूर्वावलोकन",
+        "generating": "बन रहा है...",
+        "creating": "बन रहा है...",
+        "create": "चालान बनाएं"
+      },
+      "detail": {
+        "invoiceInfo": "चालान जानकारी",
+        "lineItems": "आइटम",
+        "customer": "ग्राहक",
+        "order": "ऑर्डर",
+        "date": "तिथि",
+        "dueDate": "नियत तिथि",
+        "status": "स्थिति",
+        "product": "उत्पाद",
+        "qty": "मात्रा",
+        "unitPrice": "इकाई मूल्य",
+        "subtotal": "उप-योग",
+        "tax": "GST",
+        "total": "कुल",
+        "paid": "भुगतान हुआ",
+        "balance": "शेष राशि",
+        "notes": "टिप्पणी",
+        "downloadPdf": "PDF डाउनलोड",
+        "sendWhatsapp": "WhatsApp पर भेजें",
+        "recordPayment": "भुगतान दर्ज करें",
+        "markSent": "भेजा गया चिह्नित करें",
+        "cancelInvoice": "चालान रद्द करें",
+        "cancelInvoiceHint": "यह चालान {number} रद्द कर देगा। चालान रद्द चिह्नित हो जाएगा और आगे कोई भुगतान दर्ज नहीं किया जा सकेगा।",
+        "paymentHistory": "भुगतान इतिहास",
+        "noPayments": "अभी तक कोई भुगतान दर्ज नहीं।",
+        "auditTrail": "ऑडिट ट्रेल",
+        "noAudit": "अभी तक कोई ऑडिट प्रविष्टि नहीं।",
+        "by": "द्वारा",
+        "downloading": "डाउनलोड हो रहा है...",
+        "sending": "भेजा जा रहा है...",
+        "sentViaWhatsapp": "WhatsApp पर भेजा गया",
+        "method": "तरीका",
+        "reference": "संदर्भ",
+        "cancelConfirmDesc": "यह चालान रद्द हो जाएगा। रद्द किए गए चालान में बदलाव नहीं किया जा सकता।",
+        "cancelConfirmAction": "हाँ, रद्द करें"
+      },
+      "paymentDialog": {
+        "title": "भुगतान दर्ज करें",
+        "outstanding": "बकाया",
+        "amount": "राशि (₹)",
+        "date": "भुगतान तिथि",
+        "method": "भुगतान तरीका",
+        "reference": "संदर्भ संख्या",
+        "referencePlaceholder": "UTR / चेक नं...",
+        "notes": "टिप्पणी",
+        "recording": "दर्ज हो रहा है...",
+        "record": "भुगतान दर्ज करें",
+        "methods": {
+          "upi": "UPI",
+          "bank_transfer": "बैंक ट्रांसफर",
+          "cash": "नकद",
+          "cheque": "चेक"
+        }
+      },
+      "messages": {
+        "sendSuccess": "चालान WhatsApp पर भेजा गया।",
+        "paymentRecorded": "भुगतान दर्ज किया गया।"
+      }
     },
     "customers": {
       "title": "ग्राहक",
@@ -251,7 +361,18 @@
       "title": "सेटिंग्स",
       "description": "अपना संगठन प्रोफाइल, बिलिंग, टीम सदस्य और इंटीग्रेशन प्रबंधित करें।",
       "sprint": "Sprint 7 में बन रहा है",
-      "placeholder": "Sprint 7 पूरा होने के बाद सेटिंग्स यहाँ उपलब्ध होंगी।"
+      "placeholder": "Sprint 7 पूरा होने के बाद सेटिंग्स यहाँ उपलब्ध होंगी।",
+      "tabs": {
+        "preferences": "प्राथमिकताएँ"
+      },
+      "preferences": {
+        "whatsappTitle": "व्हाट्सएप सूचनाएँ",
+        "notificationsLabel": "व्हाट्सएप के ज़रिए दैनिक ऑर्डर सारांश, भुगतान अनुस्मारक और अनुपालन अलर्ट",
+        "notificationsHelp": "ये आपके पंजीकृत व्हाट्सएप नंबर पर मिलेंगी। सभी सक्रिय संदेश बंद करने के लिए ऑफ़ करें।",
+        "lastChanged": "अंतिम बार बदला: {when} IST",
+        "usingDefault": "डिफ़ॉल्ट उपयोग में",
+        "updateError": "आपकी प्राथमिकता सहेजी नहीं जा सकी। कृपया पुनः प्रयास करें।"
+      }
     }
   },
   "featureGate": {
@@ -286,5 +407,60 @@
   "upsell": {
     "available": "{tier} प्लान पर उपलब्ध",
     "upgrade": "अनलॉक करने के लिए अपग्रेड करें"
+  },
+  "softDelete": {
+    "deleted": "हटा दिया गया।",
+    "undo": "वापस लाएँ",
+    "restored": "वापस ले आया गया।",
+    "deleteFailed": "हटाया नहीं जा सका। फिर से कोशिश करें।",
+    "restoreFailed": "वापस नहीं लाया जा सका। फिर से कोशिश करें।",
+    "undoHint": "हटाने के बाद 30 सेकंड तक आप इसे वापस ला सकते हैं।",
+    "typeNameHint": "पुष्टि के लिए \"{label}\" टाइप करें"
+  },
+  "admin": {
+    "badge": "प्लेटफ़ॉर्म एडमिन",
+    "platformAdmin": "प्लेटफ़ॉर्म एडमिन",
+    "nav": {
+      "home": "अवलोकन",
+      "recovery": "रिकवरी",
+      "exitToDashboard": "डैशबोर्ड पर लौटें"
+    },
+    "home": {
+      "title": "प्लेटफ़ॉर्म अवलोकन",
+      "totalOrgs": "संगठन",
+      "totalUsers": "उपयोगकर्ता",
+      "recoveryCard": "हटाए गए रिकॉर्ड रिकवरी",
+      "recoveryCardHint": "किसी भी संगठन के सॉफ़्ट-डिलीट रिकॉर्ड देखें और पुनर्स्थापित करें।",
+      "recentAudit": "हाल की गतिविधि (अंतिम 50)",
+      "noAudit": "अभी कोई ऑडिट प्रविष्टि नहीं।",
+      "col": {
+        "time": "समय",
+        "action": "क्रिया",
+        "table": "तालिका",
+        "source": "स्रोत",
+        "org": "संगठन"
+      }
+    },
+    "recovery": {
+      "title": "हटाए गए रिकॉर्ड रिकवरी",
+      "description": "किसी संगठन और तालिका को चुनें, उसके सॉफ़्ट-डिलीट रिकॉर्ड देखें, और किसी को भी पुनर्स्थापित करें। पुनर्स्थापना platform_admin स्रोत के साथ लॉग होती है।",
+      "org": "संगठन",
+      "selectOrg": "एक संगठन चुनें…",
+      "table": "तालिका",
+      "load": "लोड करें",
+      "loading": "लोड हो रहा है…",
+      "loadFailed": "हटाए गए रिकॉर्ड लोड नहीं हो सके।",
+      "empty": "कोई हटाया गया रिकॉर्ड नहीं मिला।",
+      "restore": "पुनर्स्थापित करें",
+      "restoring": "पुनर्स्थापित हो रहा है…",
+      "restored": "रिकॉर्ड पुनर्स्थापित किया गया।",
+      "restoreFailed": "रिकॉर्ड पुनर्स्थापित नहीं हो सका।",
+      "col": {
+        "record": "रिकॉर्ड",
+        "id": "आईडी",
+        "deletedAt": "हटाया गया",
+        "action": "क्रिया"
+      }
+    }
   }
 }

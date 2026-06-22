@@ -435,6 +435,12 @@ Key tasks:
 
 Key tasks:
 1. Onboarding wizard for new customers
+   - Step 5 (Connect WhatsApp) must include a checkbox, **default checked**:
+     "Send me daily order summaries, payment reminders, and compliance alerts
+     via WhatsApp". It writes to `organizations.whatsapp_proactive_enabled`
+     (and sets `whatsapp_proactive_set_at = now()` when the owner toggles it).
+     The column + the matching Settings → Preferences toggle already exist
+     (migration `20260618000001_add_whatsapp_proactive_preference.sql`, S8.1).
 2. Admin dashboard (our internal view)
 3. End-to-end testing (all flows)
 4. Performance optimization

@@ -79,8 +79,12 @@ export async function signupAction(formData: FormData): Promise<SignupResult> {
       return { error: userError.message }
     }
 
-    // 4. Stamp org_id + role into auth user_metadata so middleware/getCurrentUser can read them
+    // 4. Stamp org_id + role into auth metadata so middleware/getCurrentUser/RLS can read them.
+    // SECURITY: the authoritative copy lives in app_metadata — users CANNOT self-edit it
+    // (only the service-role key can write it). user_metadata is mirrored only for backward
+    // compatibility during the migration window and can be dropped in a later cleanup sprint.
     const { error: metaError } = await adminClient.auth.admin.updateUserById(authUserId, {
+      app_metadata: { org_id: orgId, role },
       user_metadata: { org_id: orgId, role },
     })
 
