@@ -324,9 +324,91 @@
     },
     "production": {
       "title": "ઉત્પાદન",
-      "description": "બૅચ પ્રગ્રેસ, મશીન ઉપયોગ અને ઉત્પાદન લક્ષ્ય ટ્રૅક કરો.",
-      "sprint": "Sprint 5 માં નિર્માણ થઈ રહ્યું છે",
-      "placeholder": "Sprint 5 પૂર્ણ થયા પછી ઉત્પાદન ટ્રૅકિંગ અહીં ઉપલબ્ધ થશે."
+      "description": "બૅચ પ્રગ્રેસ ટ્રૅક કરો અને ઉત્પાદન પ્રાથમિકતા સૂચિ સંચાલિત કરો.",
+      "logProduction": "Log Production",
+      "tabs": {
+        "queue": "Priority Queue",
+        "log": "Production Log"
+      },
+      "summary": {
+        "todayProduction": "Today's Production",
+        "todayRejection": "Today's Rejection Rate",
+        "weeklyTotal": "This Week's Total",
+        "atRisk": "Orders at Risk",
+        "pieces": "{count} pcs",
+        "noData": "—"
+      },
+      "queue": {
+        "empty": "No active orders in production or pending confirmation.",
+        "dragHint": "Drag rows to reorder priority. Advisory only — does not change committed dates.",
+        "noDeliveryDate": "No date set",
+        "noPaceData": "No recent output",
+        "onTrack": "On track",
+        "complete": "Complete",
+        "columns": {
+          "priority": "#",
+          "order": "Order",
+          "customer": "Customer",
+          "product": "Product",
+          "remaining": "Remaining",
+          "progress": "Progress",
+          "deliveryDate": "Promised",
+          "pace": "Pace"
+        }
+      },
+      "log": {
+        "empty": "No production batches logged yet.",
+        "loading": "Loading...",
+        "columns": {
+          "date": "Date",
+          "order": "Order",
+          "product": "Product",
+          "produced": "Produced",
+          "rejected": "Rejected",
+          "yield": "Yield %",
+          "worker": "Worker"
+        },
+        "filters": {
+          "dateFrom": "From",
+          "dateTo": "To",
+          "allOrders": "All orders",
+          "allWorkers": "All workers"
+        },
+        "prev": "Previous",
+        "next": "Next",
+        "pageInfo": "Page {page} of {pages}"
+      },
+      "logDialog": {
+        "title": "Log Production Batch",
+        "orderLabel": "Order (in production)",
+        "orderPlaceholder": "Select order...",
+        "qtyProducedLabel": "Quantity Produced",
+        "qtyRejectedLabel": "Quantity Rejected",
+        "defectTypeLabel": "Rejection Reason",
+        "defectTypePlaceholder": "Select reason...",
+        "shiftLabel": "Shift",
+        "shiftPlaceholder": "Select shift...",
+        "notesLabel": "Notes",
+        "notesPlaceholder": "Optional notes...",
+        "submit": "Log Batch",
+        "cancel": "Cancel",
+        "error": "Failed to log batch. Please try again.",
+        "success": "Batch logged."
+      },
+      "defectTypes": {
+        "sand_holes": "Sand Holes",
+        "dimensional": "Dimensional Error",
+        "porosity": "Porosity",
+        "shrinkage": "Shrinkage",
+        "cold_shut": "Cold Shut",
+        "surface_defect": "Surface Defect",
+        "other": "Other"
+      },
+      "shifts": {
+        "shift_1": "Shift 1",
+        "shift_2": "Shift 2",
+        "shift_3": "Shift 3"
+      }
     },
     "quality": {
       "title": "ગુણવત્તા",
