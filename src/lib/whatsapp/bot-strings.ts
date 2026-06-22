@@ -10,6 +10,9 @@
 export type Locale = 'en' | 'hi' | 'gu'
 
 export type BotStrings = {
+  duplicateOrder: {
+    notice: (orderNumber: string) => string
+  }
   orderDraft: {
     title: string
     urgentSuffix: string
@@ -51,6 +54,9 @@ export type BotStrings = {
 
 const STRINGS: Record<Locale, BotStrings> = {
   en: {
+    duplicateOrder: {
+      notice: (orderNumber) => `ℹ️ Order ${orderNumber} already exists — no duplicate created.`,
+    },
     orderDraft: {
       title: '📋 Order Draft',
       urgentSuffix: ' | Urgent',
@@ -91,6 +97,9 @@ const STRINGS: Record<Locale, BotStrings> = {
   },
 
   gu: {
+    duplicateOrder: {
+      notice: (orderNumber) => `ℹ️ ઓર્ડર ${orderNumber} પહેલેથી છે — ડુપ્લિકેટ બનાવ્યો નથી.`,
+    },
     orderDraft: {
       title: '📋 ઓર્ડર ડ્રાફ્ટ',
       urgentSuffix: ' | અર્જન્ટ',
@@ -131,6 +140,9 @@ const STRINGS: Record<Locale, BotStrings> = {
   },
 
   hi: {
+    duplicateOrder: {
+      notice: (orderNumber) => `ℹ️ ऑर्डर ${orderNumber} पहले से मौजूद है — डुप्लिकेट नहीं बनाया।`,
+    },
     orderDraft: {
       title: '📋 ऑर्डर ड्राफ्ट',
       urgentSuffix: ' | अर्जेंट',

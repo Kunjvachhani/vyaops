@@ -176,6 +176,24 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
     const fullyPaid = newPaidTotal >= current.total_amount_paise
     const nextStatus = fullyPaid ? 'paid' : 'partially_paid'
 
+    // Idempotency: reject double-recording the same payment (same amount + date).
+    const { data: dupPayRaw } = await adminClient
+      .from('payments')
+      .select('id, amount_paise, payment_date, payment_method, reference_number, notes, created_at')
+      .eq('organization_id', user.org_id)
+      .eq('invoice_id', id)
+      .eq('amount_paise', payment.amountPaise)
+      .eq('payment_date', payment.paymentDate)
+      .is('deleted_at', null)
+      .maybeSingle()
+
+    if (dupPayRaw) {
+      return NextResponse.json(
+        { data: current, payment: dupPayRaw as unknown as PaymentRow, idempotent: true },
+        { status: 200 }
+      )
+    }
+
     // Insert the payment record (history).
     const { data: payRaw, error: payErr } = await adminClient
       .from('payments')

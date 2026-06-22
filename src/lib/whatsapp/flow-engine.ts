@@ -526,6 +526,14 @@ async function executeNewOrder(
     .update({ state: 'confirmed', confirmed_order_id: orderResult.orderId })
     .eq('id', pending.id)
 
+  if (orderResult.idempotent) {
+    // Same order was already created this hour — notify owner without re-confirming.
+    const dupText = getBotStrings(locale).duplicateOrder.notice(orderResult.orderNumber)
+    await sendTextMessage(chatPhone, dupText, orgId)
+    console.log('[flow-engine] NEW_ORDER idempotent — duplicate skipped:', orderResult.orderNumber)
+    return
+  }
+
   // Build and send confirmation (Rule A — this is one of the three allowed sends)
   const s = getBotStrings(locale).confirm
   const readyLine = promisedDate ? s.readyBy(formatISTDate(new Date(promisedDate))) : ''
