@@ -257,32 +257,17 @@ export function InvoicesClient({ canDelete = false }: { canDelete?: boolean }) {
   }, [])
 
   function exportCsv() {
-    const headers = [
-      t('columns.invoiceNumber'),
-      t('columns.customer'),
-      t('columns.amount'),
-      t('columns.status'),
-      t('columns.dueDate'),
-    ]
-    const rows = invoices.map((inv) => [
-      inv.invoice_number,
-      inv.customers?.name ?? '',
-      String(inv.total_amount_paise / 100),
-      effectiveStatus(inv),
-      inv.due_date,
-    ])
-    const csv = [headers, ...rows]
-      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
-      .join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
+    const params = new URLSearchParams()
+    if (searchRef.current) params.set('search', searchRef.current)
+    if (statusesRef.current.length > 0) params.set('statuses', statusesRef.current.join(','))
+    if (customerIdRef.current) params.set('customer_id', customerIdRef.current)
+    if (dateFromRef.current) params.set('date_from', dateFromRef.current)
+    if (dateToRef.current) params.set('date_to', dateToRef.current)
     const a = document.createElement('a')
-    a.href = url
-    a.download = `invoices-${new Date().toISOString().slice(0, 10)}.csv`
+    a.href = `/api/invoices/export?${params}`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
-    URL.revokeObjectURL(url)
   }
 
   // Resolve the badge status: a virtual "overdue" overrides the stored status.

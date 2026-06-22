@@ -17,7 +17,7 @@ import {
 import { AddCustomerDialog } from './add-customer-dialog'
 import { CustomerDetailDialog } from './customer-detail-dialog'
 import { paiseToCurrency } from '@/lib/utils/currency'
-import { Search, UserPlus, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, UserPlus, Download, ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface CustomerRow {
   id: string
@@ -109,6 +109,16 @@ export function CustomersClient({ canDelete = false }: { canDelete?: boolean }) 
     fetchCustomers(search, page)
   }
 
+  function exportCsv() {
+    const params = new URLSearchParams()
+    if (search) params.set('search', search)
+    const a = document.createElement('a')
+    a.href = `/api/customers/export?${params}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
   return (
     <div className="space-y-4">
       {/* Toolbar */}
@@ -122,10 +132,16 @@ export function CustomersClient({ canDelete = false }: { canDelete?: boolean }) 
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Button onClick={() => setAddOpen(true)} className="gap-2 self-start sm:self-auto">
-          <UserPlus className="h-4 w-4" />
-          {t('pages.customers.addCustomer')}
-        </Button>
+        <div className="flex gap-2 self-start sm:self-auto">
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={exportCsv}>
+            <Download className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">{t('pages.customers.exportCsv')}</span>
+          </Button>
+          <Button onClick={() => setAddOpen(true)} className="gap-2">
+            <UserPlus className="h-4 w-4" />
+            {t('pages.customers.addCustomer')}
+          </Button>
+        </div>
       </div>
 
       {/* Desktop table / Mobile cards */}

@@ -279,6 +279,7 @@
       "sprint": "Sprint 3 में बन रहा है",
       "placeholder": "Sprint 3 पूरा होने के बाद ग्राहक प्रबंधन यहाँ उपलब्ध होगा।",
       "addCustomer": "ग्राहक जोड़ें",
+      "exportCsv": "CSV निर्यात",
       "searchPlaceholder": "नाम, फोन या कंपनी से खोजें...",
       "columns": {
         "name": "नाम",

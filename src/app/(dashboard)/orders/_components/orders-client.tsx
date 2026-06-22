@@ -261,38 +261,18 @@ export function OrdersClient({ canDelete = false }: { canDelete?: boolean }) {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // CSV export
   function exportCsv() {
-    const headers = [
-      t('columns.orderNumber'),
-      t('columns.customer'),
-      t('columns.product'),
-      t('columns.qty'),
-      t('columns.amount'),
-      t('columns.status'),
-      t('columns.date'),
-    ]
-    const rows = orders.map((o) => [
-      o.order_number,
-      o.customers?.name ?? '',
-      o.products?.name ?? '',
-      String(o.quantity),
-      String(o.total_amount_paise / 100),
-      o.status,
-      formatISTDate(new Date(o.created_at)),
-    ])
-    const csv = [headers, ...rows]
-      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
-      .join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
+    const params = new URLSearchParams()
+    if (searchRef.current) params.set('search', searchRef.current)
+    if (statusesRef.current.length > 0) params.set('statuses', statusesRef.current.join(','))
+    if (customerIdRef.current) params.set('customer_id', customerIdRef.current)
+    if (dateFromRef.current) params.set('date_from', dateFromRef.current)
+    if (dateToRef.current) params.set('date_to', dateToRef.current)
     const a = document.createElement('a')
-    a.href = url
-    a.download = `orders-${new Date().toISOString().slice(0, 10)}.csv`
+    a.href = `/api/orders/export?${params}`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
-    URL.revokeObjectURL(url)
   }
 
   function statusLabel(s: string): string {

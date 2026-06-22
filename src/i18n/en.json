@@ -277,6 +277,7 @@
       "sprint": "Building in Sprint 3",
       "placeholder": "Customer management will be available here once Sprint 3 is complete.",
       "addCustomer": "Add Customer",
+      "exportCsv": "Export CSV",
       "searchPlaceholder": "Search by name, phone, or company...",
       "columns": {
         "name": "Name",

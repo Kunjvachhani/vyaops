@@ -279,6 +279,7 @@
       "sprint": "Sprint 3 માં નિર્માણ થઈ રહ્યું છે",
       "placeholder": "Sprint 3 પૂર્ણ થયા પછી ગ્રાહક સંચાલન અહીં ઉપલબ્ધ થશે.",
       "addCustomer": "ગ્રાહક ઉમેરો",
+      "exportCsv": "CSV નિકાસ",
       "searchPlaceholder": "નામ, ફોન અથવા કંપની દ્વારા શોધો...",
       "columns": {
         "name": "નામ",
