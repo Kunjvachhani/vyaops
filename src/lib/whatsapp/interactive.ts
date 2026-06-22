@@ -1,10 +1,7 @@
 import { adminClient } from '@/lib/supabase/admin'
 import { paiseToCurrency } from '@/lib/utils/currency'
-import { hasAccess } from '@/config/features'
-import { ALL_MENU_ITEMS } from '@/config/whatsapp-menus'
 import { getBotStrings } from '@/lib/whatsapp/bot-strings'
 import type { Locale } from '@/lib/whatsapp/bot-strings'
-import type { Tier } from '@/lib/constants'
 import type { Button, InteractiveMessage, ClarificationOption } from '@/types/whatsapp'
 
 export type { InteractiveMessage, ClarificationOption }
@@ -19,69 +16,7 @@ function trunc(s: string, max: number): string {
   return s.length <= max ? s : `${s.slice(0, max - 1)}…`
 }
 
-// ─── 1. Main menu ─────────────────────────────────────────────────────────────
-
-export function buildMainMenu(orgTier: Tier): InteractiveMessage {
-  const rows = ALL_MENU_ITEMS.filter((item) => hasAccess(orgTier, item.featureKey))
-    .slice(0, MAX_LIST_ROWS)
-    .map((item) => ({
-      id: item.id,
-      title: trunc(item.title, LIST_TITLE_MAX),
-      description: trunc(item.description, LIST_DESC_MAX),
-    }))
-
-  return {
-    type: 'list',
-    body: 'VyaOps — What would you like to do today?',
-    sections: [{ title: 'Features', rows }],
-  }
-}
-
-// ─── 2. Customer list (sorted by order frequency) ────────────────────────────
-
-export async function buildCustomerList(orgId: string): Promise<InteractiveMessage> {
-  const [{ data: orders, error: ordersErr }, { data: customers, error: custErr }] =
-    await Promise.all([
-      adminClient
-        .from('orders')
-        .select('customer_id')
-        .eq('organization_id', orgId)
-        .is('deleted_at', null),
-      adminClient
-        .from('customers')
-        .select('id, name, address')
-        .eq('organization_id', orgId)
-        .is('deleted_at', null),
-    ])
-
-  if (ordersErr) throw new Error(`buildCustomerList orders: ${ordersErr.message}`)
-  if (custErr) throw new Error(`buildCustomerList customers: ${custErr.message}`)
-
-  const freq = new Map<string, number>()
-  for (const o of orders ?? []) {
-    freq.set(o.customer_id, (freq.get(o.customer_id) ?? 0) + 1)
-  }
-
-  const rows = (customers ?? [])
-    .sort((a, b) => {
-      const diff = (freq.get(b.id) ?? 0) - (freq.get(a.id) ?? 0)
-      return diff !== 0 ? diff : a.name.localeCompare(b.name, 'hi')
-    })
-    .slice(0, MAX_LIST_ROWS)
-    .map((c) => ({
-      id: c.id,
-      title: trunc(c.name, LIST_TITLE_MAX),
-      description: c.address ? trunc(c.address, LIST_DESC_MAX) : undefined,
-    }))
-
-  return {
-    type: 'list',
-    body: 'Select a customer:',
-    sections: [{ title: 'Customers', rows }],
-  }
-}
-
-// ─── 3. Product list (sorted by order frequency, optionally per customer) ─────
+// ─── 1. Product list (sorted by order frequency, optionally per customer) ─────
 
 export async function buildProductList(
   orgId: string,
@@ -141,33 +76,7 @@ export async function buildProductList(
   }
 }
 
-// ─── 4. Vendor list (alphabetical) ───────────────────────────────────────────
-
-export async function buildVendorList(orgId: string): Promise<InteractiveMessage> {
-  const { data: vendors, error } = await adminClient
-    .from('vendors')
-    .select('id, name, address')
-    .eq('organization_id', orgId)
-    .is('deleted_at', null)
-    .order('name', { ascending: true })
-    .limit(MAX_LIST_ROWS)
-
-  if (error) throw new Error(`buildVendorList: ${error.message}`)
-
-  const rows = (vendors ?? []).map((v) => ({
-    id: v.id,
-    title: trunc(v.name, LIST_TITLE_MAX),
-    description: v.address ? trunc(v.address, LIST_DESC_MAX) : undefined,
-  }))
-
-  return {
-    type: 'list',
-    body: 'Select a vendor:',
-    sections: [{ title: 'Vendors', rows }],
-  }
-}
-
-// ─── 5. Clarification ("Did you mean?") ──────────────────────────────────────
+// ─── 2. Clarification ("Did you mean?") ──────────────────────────────────────
 
 export function buildClarification(options: ClarificationOption[]): InteractiveMessage {
   const top = options.slice(0, 3)
@@ -196,7 +105,7 @@ export function buildClarification(options: ClarificationOption[]): InteractiveM
   }
 }
 
-// ─── 7. Order Draft (posted to chat after owner AFFIRM) ───────────────────────
+// ─── 3. Order Draft (posted to chat after owner AFFIRM) ───────────────────────
 // Visible to both customer and owner. Owner replies "ok" or "ok <date>" to confirm.
 
 export interface OrderDraftData {
@@ -290,7 +199,74 @@ export function buildCancellationDraft(data: CancellationDraftData, locale: Loca
   return lines.join('\n')
 }
 
-// ─── 8. Owner /status summary ─────────────────────────────────────────────────
+// ─── 4. In-production order list (for worker production logging flow) ─────────
+
+export async function buildOrderListForProduction(
+  orgId: string,
+  _workerId?: string
+): Promise<InteractiveMessage> {
+  const { data: orders, error } = await adminClient
+    .from('orders')
+    .select(
+      'id, order_number, quantity, quantity_produced, product_id, products(name, unit), customers(name)'
+    )
+    .eq('organization_id', orgId)
+    .eq('status', 'in_production')
+    .is('deleted_at', null)
+    .order('created_at', { ascending: true })
+    .limit(MAX_LIST_ROWS)
+
+  if (error) throw new Error(`buildOrderListForProduction: ${error.message}`)
+
+  type InProductionOrder = {
+    id: string
+    order_number: string
+    quantity: number
+    quantity_produced: number
+    products: { name: string; unit: string } | null
+    customers: { name: string } | null
+  }
+
+  const rows = ((orders ?? []) as unknown as InProductionOrder[]).map((o) => {
+    const productName = o.products?.name ?? 'Unknown'
+    const done = o.quantity_produced ?? 0
+    const progress = done > 0 ? ` (${done}/${o.quantity} done)` : ''
+    const customer = o.customers?.name ? trunc(o.customers.name, 20) : ''
+    const desc = customer ? `${customer}${progress}` : progress || undefined
+    return {
+      id: o.id,
+      title: trunc(`${o.order_number}: ${productName}`, LIST_TITLE_MAX),
+      description: desc ? trunc(desc, LIST_DESC_MAX) : undefined,
+    }
+  })
+
+  return {
+    type: 'list',
+    body: 'Select an order to log production:',
+    sections: [{ title: 'In Production', rows }],
+  }
+}
+
+// ─── Production confirmation (text message after batch is logged) ──────────────
+
+export interface ProductionConfirmationData {
+  quantityProduced: number
+  quantityRejected: number
+  defectType?: string
+  orderNumber: string
+  productName: string
+}
+
+export function buildProductionConfirmation(data: ProductionConfirmationData): string {
+  const good = data.quantityProduced - data.quantityRejected
+  const rejectedPart =
+    data.quantityRejected > 0
+      ? ` + ${data.quantityRejected} rejected${data.defectType ? ` (${data.defectType})` : ''}`
+      : ''
+  return `Logged: ${good} good${rejectedPart} for Order #${data.orderNumber} (${data.productName})`
+}
+
+// ─── 5. Owner /status summary ─────────────────────────────────────────────────
 
 export interface StatusOrderItem {
   orderNumber: string

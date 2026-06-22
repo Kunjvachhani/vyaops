@@ -183,7 +183,7 @@ Without this the bot replies to itself forever.
 ## Orchestration Boundary
 
 Steps 1–3 run in `/api/webhooks/whatsapp`:
-- HMAC-SHA256 verification using META_WHATSAPP_APP_SECRET
+- Two-layer webhook auth: HMAC-SHA256 (DUALHOOK_SIGNING_SECRET → META_WHATSAPP_APP_SECRET fallback) + URL token fallback (WHATSAPP_WEBHOOK_URL_TOKEN)
 - Acknowledge with 200 immediately (< 1 second)
 - Org lookup by phone_number_id
 - Customer identification by sender phone

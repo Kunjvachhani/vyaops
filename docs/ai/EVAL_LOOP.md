@@ -5,14 +5,16 @@
 1. GENERATE (DeepSeek V4 Pro) → raw intent + entities JSON
 2. SCORE (Qwen 3.7 Max via OpenRouter) → composite score 0.00-1.00
 3. GATE (threshold routing):
-   ≥ 0.85 → auto-process, create record, send confirmation
-   0.70-0.84 → hold in temp cache, send confirmation buttons to owner
+   ≥ 0.85 → auto-process: post draft immediately (skip clarification step, NOT skip owner ok)
+   0.70-0.84 → hold in temp cache, send clarification options to owner
    0.50-0.69 → show clarification options: "Did you mean [A] or [B]?"
    < 0.50 → silent fail, show guided prompt menu, log for benchmark
 4. SHIP or REWORK → execute or re-capture via guided flow
 5. MONITOR → track corrections, rejections, manual overrides
 6. BENCHMARK GROWS → every correction = new test case
 ```
+
+> **CRITICAL:** `auto_process` means "post the draft without asking for clarification." It NEVER means "skip the owner's ok and create an order directly." The draft + explicit owner "ok" loop is always required. See CLAUDE.md AI Integration Rules.
 
 ## Two-Model Pattern
 Generator and evaluator are DIFFERENT models. Same-model eval shares blind spots.

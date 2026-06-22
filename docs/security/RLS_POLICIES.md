@@ -74,12 +74,14 @@ CREATE POLICY "[table]_update" ON [table] FOR UPDATE
 ```sql
 ALTER TABLE org_dictionary ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "select" ON org_dictionary FOR SELECT
-  USING (organization_id = (auth.jwt()->'user_metadata'->>'org_id')::uuid AND deleted_at IS NULL);
+  USING (organization_id = _current_org_id() AND deleted_at IS NULL);
 CREATE POLICY "insert" ON org_dictionary FOR INSERT
-  WITH CHECK (organization_id = (auth.jwt()->'user_metadata'->>'org_id')::uuid);
+  WITH CHECK (organization_id = _current_org_id());
 CREATE POLICY "update" ON org_dictionary FOR UPDATE
-  USING (organization_id = (auth.jwt()->'user_metadata'->>'org_id')::uuid);
+  USING (organization_id = _current_org_id());
 ```
+
+> **NOTE:** If a live migration was applied using the old `user_metadata` path, create a new migration in `supabase/migrations/` to DROP and recreate these three policies using `_current_org_id()`. The `_current_org_id()` helper reads `app_metadata` first with a `user_metadata` fallback, matching the pattern used by every other table.
 
 ### industry_dictionary (RLS ENABLED — read-only for authenticated, write via service-role)
 ```sql

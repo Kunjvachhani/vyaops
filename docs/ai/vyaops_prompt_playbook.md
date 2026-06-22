@@ -10,6 +10,16 @@ Operational guide for the AI pipeline. Explains WHEN each prompt fires, HOW they
 WhatsApp message arrives (webhook)
        │
        ▼
+┌─ WEBHOOK AUTH (before any processing) ───────────────────┐
+│ Two-layer verification per CLAUDE.md:                     │
+│ Layer 1: X-Hub-Signature-256 HMAC                         │
+│   → try DUALHOOK_SIGNING_SECRET, then META_APP_SECRET     │
+│ Layer 2 (fallback): URL token (?t= param)                 │
+│ REJECT if both fail. Acknowledge 200 in <1 second.        │
+│ Processing is async (Next.js after()).                     │
+└───────────────────────────────────────────────────────────┘
+       │
+       ▼
 ┌─ STEP 0: Echo Check ─────────────────────────────────────┐
 │ Is wamid in whatsapp_messages outbound log?               │
 │ YES → ignore (echo loop prevention, Rule C)               │
@@ -20,6 +30,18 @@ WhatsApp message arrives (webhook)
 ┌─ STEP 1: Org Lookup ─────────────────────────────────────┐
 │ phone_number_id → organizations.whatsapp_phone_number_id  │
 │ Load org tier, industry_segment, language_preference       │
+└───────────────────────────────────────────────────────────┘
+       │
+       ▼
+┌─ n8n HANDOFF ────────────────────────────────────────────┐
+│ Webhook forwards to n8n master-message-handler:           │
+│ {message, chatPhone, orgId, messageType, isCommand?}      │
+│ n8n routes:                                               │
+│   customer_text → /api/whatsapp/flow (Steps 2-5 below)   │
+│   owner_echo    → /api/whatsapp/flow (Step 6 below)      │
+│   status/unknown → log only, no reply                     │
+│ n8n NEVER calls DeepSeek, Meta, or Supabase directly.     │
+│ All AI + WhatsApp + DB flows through the Next.js layer.   │
 └───────────────────────────────────────────────────────────┘
        │
        ▼
@@ -46,11 +68,11 @@ WhatsApp message arrives (webhook)
 ┌─ STEP 4: Eval Gate ──────────────────────────────────────┐
 │ Model: Qwen 3.7 Max (cross-model scoring)                │
 │ Prompt: #8 (see EVAL_LOOP.md)                            │
-│ Scores: accuracy, completeness, safety (0-10)            │
+│ Scores: accuracy, completeness, safety (0.00-1.00)       │
 │ Decision bands:                                          │
-│   auto_process (≥8.0) → post draft immediately           │
-│   confirm (5.0-7.9)   → ask owner for clarification      │
-│   reject (<5.0)        → show menu, don't guess           │
+│   auto_process (≥0.85) → post draft immediately          │
+│   confirm (0.50-0.84)  → ask owner for clarification     │
+│   reject (<0.50)        → show menu, don't guess          │
 │ CRITICAL: auto_process = "skip clarification step"        │
 │           NOT "skip owner ok". Draft+ok always required.  │
 └───────────────────────────────────────────────────────────┘
@@ -65,6 +87,10 @@ WhatsApp message arrives (webhook)
 │ GENERAL_QUERY  → log only                                │
 │ INVOICE_REQUEST→ generate PDF → draft to owner           │
 │ PAYMENT_UPDATE → log payment → draft to owner            │
+│                                                           │
+│ NOTE: Only ONE pending_order in (detected, draft_posted)  │
+│ per org+customer. New detection expires the old one first. │
+│ See MESSAGE_PIPELINE.md for the full state machine.        │
 └──────────────────────────────────────────────────────────┘
        │
        ▼
@@ -151,6 +177,8 @@ WhatsApp message arrives (webhook)
 5. **Eval gate failure → confirm band:** If eval gate errors or returns garbage, default to `confirm` (ask owner). Never auto-process on eval failure.
 
 6. **Dialect override validation:** When Prompt #9 overrides a dictionary lookup, log the override for review. If the dictionary is wrong, it needs fixing — not silent AI overrides.
+
+7. **Internal API auth:** All n8n → Next.js callback routes (`/api/whatsapp/flow`, `/api/ai`, `/api/whatsapp/send`, `/api/analytics/log-intent`, `/api/errors/log`) require `x-internal-api-key` header matching `INTERNAL_API_KEY`. n8n holds only `APP_URL` + `INTERNAL_API_KEY`, no Meta/DeepSeek keys.
 
 ---
 

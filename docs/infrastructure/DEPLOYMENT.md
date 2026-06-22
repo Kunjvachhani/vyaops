@@ -62,7 +62,9 @@ PR opened → TypeScript check + ESLint + unit tests
 ```
 
 ## Webhook Security
-- Meta Cloud API: verify X-Hub-Signature-256 header with META_WHATSAPP_APP_SECRET (HMAC-SHA256)
+- WhatsApp (two-layer auth per CLAUDE.md):
+  - Layer 1: X-Hub-Signature-256 HMAC — first try DUALHOOK_SIGNING_SECRET, then META_WHATSAPP_APP_SECRET
+  - Layer 2 (fallback): secret URL token (?t= query param, WHATSAPP_WEBHOOK_URL_TOKEN) baked into the Dualhook webhook URL. Required because Dualhook Coexistence deliveries are signed by their tech-provider app secret.
 - Razorpay: verify X-Razorpay-Signature with RAZORPAY_WEBHOOK_SECRET
-- REJECT any webhook that fails signature verification
+- REJECT any webhook that fails ALL applicable verification layers
 - Log all rejected webhooks to Sentry for monitoring

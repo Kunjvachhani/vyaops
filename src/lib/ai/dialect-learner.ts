@@ -12,6 +12,8 @@
  * Spec: docs/ai/DIALECT_DICTIONARY.md — "Learning Loop" section
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/types/database';
 import type {
   CorrectionParams,
   CorrectionAnalysis,
@@ -428,8 +430,7 @@ export async function confirmOnboardingEntry(
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SupabaseAdmin = any;
+type SupabaseAdmin = SupabaseClient<Database>;
 
 async function getAdminClient(): Promise<SupabaseAdmin> {
   const { createClient } = await import('@supabase/supabase-js');

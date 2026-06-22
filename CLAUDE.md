@@ -14,7 +14,7 @@
 ## Read These Docs Before Writing Any Code
 ```
 REQUIRED READING ORDER:
-1. docs/database/SCHEMA.md          → Complete database schema (23 tables)
+1. docs/database/SCHEMA.md          → Complete database schema (25 tables)
 2. docs/security/RLS_POLICIES.md    → Row-Level Security for multi-tenancy
 3. docs/security/FEATURE_GATING.md  → Tier-based feature access control
 4. docs/security/EDGE_CASES.md      → Safety, destructive action protection

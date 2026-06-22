@@ -8,14 +8,15 @@ back through the Next.js app, so all WhatsApp sends, AI calls, and writes flow
 through one audited, credential-holding layer.
 
 ```
-Meta → /api/webhooks/whatsapp (verify HMAC, log, decide isTriggered)
-     → forwards {message, sender, orgId, messageType, isTriggered} to n8n webhook
-     → n8n routes (guided / AI / log-only) and calls BACK into Next.js:
+Meta → /api/webhooks/whatsapp (two-layer webhook auth, log, echo guard, org lookup)
+     → forwards {message, chatPhone, orgId, messageType, isCommand?} to n8n webhook
+     → n8n routes (customer_text / owner_echo / log-only) and calls BACK into Next.js:
+         /api/whatsapp/flow       flow engine: handleCustomerMessage / handleOwnerEcho
          /api/ai                  intent → resolve → eval → routing decision
-         /api/whatsapp/menu       build main/sub menu (returns or sends)
          /api/whatsapp/send       forward a built Meta message → Cloud API
+         /api/whatsapp/menu       DEPRECATED — retained for potential future admin tooling, not called by any active workflow
          /api/session/store       guided-flow conversation state
-         /api/analytics/log-intent PostHog capture (Branch C, no reply)
+         /api/analytics/log-intent PostHog capture (log-only branch, no reply)
          /api/errors/log          error sink (Error Trigger branch)
          /api/orders              order creation
 ```
@@ -26,29 +27,29 @@ holds only `APP_URL` + `INTERNAL_API_KEY` (workflow env), no Meta/DeepSeek keys.
 ## Workflow Categories
 
 ### Message-Triggered (real-time, <15s processing)
-| Workflow | Trigger | Action |
-|----------|---------|--------|
-| whatsapp-message-handler | Meta Cloud API webhook (via Dualhook Webhook Override) | Routes to sub-workflows based on intent |
-| order-intake | Intent=NEW_ORDER | Parse → match → eval → confirm → create |
-| invoice-generator | Intent=INVOICE_REQUEST or order completed | Generate PDF → save → send |
-| production-logger | Intent=PRODUCTION_UPDATE | Parse → validate → save → update inventory/orders |
-| inventory-checker | Intent=INVENTORY_CHECK | Query stock → format → respond |
+| Workflow | Trigger | Action | Status |
+|----------|---------|--------|--------|
+| master-message-handler | Meta Cloud API webhook (via Dualhook Webhook Override) | Routes to flow engine based on message type | ✅ Built |
+| order-intake | Intent=NEW_ORDER | Parse → match → eval → draft → confirm → create | ⚠️ Handled inside master-handler + /api/whatsapp/flow, not a separate workflow |
+| invoice-generator | Intent=INVOICE_REQUEST or order completed | Generate PDF → save → send | 🔲 Planned |
+| production-logger | Intent=PRODUCTION_UPDATE | Parse → validate → save → update inventory/orders | 🔲 Planned |
+| inventory-checker | Intent=INVENTORY_CHECK | Query stock → format → respond | 🔲 Planned |
 
 ### Scheduled (cron-based)
-| Workflow | Schedule | Action |
-|----------|----------|--------|
-| daily-order-summary    | 8:00 AM IST  | Query yesterday orders + today production + overdue → send template |
-| daily-evening-summary  | 7:00 PM IST  | Query production + inventory → send template |
-| payment-reminder       | 10:00 AM IST | Query overdue invoices → send tiered reminders |
-| low-stock-alert        | 7:00 PM IST  | Check inventory vs reorder level → alert |
-| compliance-reminder    | 8:00 AM IST  | Check upcoming deadlines → notify |
+| Workflow | Schedule | Action | Status |
+|----------|----------|--------|--------|
+| daily-order-summary | 8:00 AM IST | Query yesterday orders + today production + overdue → send template | ✅ Built |
+| payment-reminder | 10:00 AM IST | Query overdue invoices → send tiered reminders | ✅ Built |
+| daily-evening-summary | 7:00 PM IST | Query production + inventory → send template | 🔲 Planned (tier_2+) |
+| low-stock-alert | 7:00 PM IST | Check inventory vs reorder level → alert | 🔲 Planned (tier_2+) |
+| compliance-reminder | 8:00 AM IST | Check upcoming deadlines → notify | 🔲 Planned (tier_3) |
 
 ### Event-Triggered (database webhook)
-| Workflow | Trigger | Action |
-|----------|---------|--------|
-| order-completed | orders.status → 'completed' | Prompt invoice generation |
-| payment-received | payments INSERT | Update invoice status |
-| inventory-low | inventory below reorder | Suggest vendor PO |
+| Workflow | Trigger | Action | Status |
+|----------|---------|--------|--------|
+| order-completed | orders.status → 'completed' | Prompt invoice generation | 🔲 Planned |
+| payment-received | payments INSERT | Update invoice status | 🔲 Planned |
+| inventory-low | inventory below reorder | Suggest vendor PO | 🔲 Planned |
 
 ## Error Handling
 - All workflows: 3 retries with exponential backoff (1s, 2s, 4s)

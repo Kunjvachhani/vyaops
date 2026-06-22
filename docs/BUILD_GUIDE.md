@@ -131,7 +131,7 @@ Follow the patterns in CLAUDE.md exactly."
 - src/app/(auth)/signup/page.tsx (creates user + organization)
 - src/middleware.ts (auth check + feature gating)
 - Auth callback route for Supabase
-Use Supabase Auth. Store org_id and role in user_metadata.
+Use Supabase Auth. Store org_id and role in app_metadata (NOT user_metadata — user_metadata is self-editable by the user, see CLAUDE.md Security Rule 12). Use adminClient.auth.admin.updateUserById() to stamp app_metadata server-side.
 Follow CLAUDE.md conventions for all components."
 ```
 
@@ -184,7 +184,7 @@ Fix any issues found during testing."
 **End of Sprint 1 — submit WhatsApp templates to Meta via Meta Business Suite (manual task, not Claude Code)**
 
 ### Sprint 1 Checklist
-- [ ] All 16 database tables created with RLS
+- [ ] All Sprint 1 database tables created with RLS (16 core tables; later sprints add dialect tables, pending_orders, platform_admins, corrections, etc.)
 - [ ] Auth working (login, signup, org creation)
 - [ ] Dashboard layout with responsive sidebar
 - [ ] 12 pages accessible (placeholder content)
@@ -205,14 +205,18 @@ Fix any issues found during testing."
 ```
 "Read docs/architecture/MESSAGE_PIPELINE.md completely. Build the webhook handler:
 - POST /api/webhooks/whatsapp/route.ts
-- Verify Meta webhook signature using X-Hub-Signature-256 header against META_WHATSAPP_APP_SECRET (HMAC-SHA256)
+- Verify webhook signature — two-layer auth per CLAUDE.md:
+  Layer 1: X-Hub-Signature-256 HMAC against DUALHOOK_SIGNING_SECRET then META_WHATSAPP_APP_SECRET
+  Layer 2 (fallback): secret URL token (?t= query param, WHATSAPP_WEBHOOK_URL_TOKEN)
+  Layer 2 exists because Dualhook Coexistence deliveries are signed with Dualhook's tech-provider app secret, which is not exposed to us.
 - Acknowledge with 200 response immediately (< 1 second)
 - Parse message payload — Meta Cloud API format: entry[].changes[].value.messages[] (text, interactive button, list reply)
-- Lookup organization by sender phone number from organizations table
+- Lookup organization by metadata.phone_number_id → organizations.whatsapp_phone_number_id (NEVER by sender phone — sender is the customer)
 - Log raw message to whatsapp_messages table
-- Check if message is triggered (button tap, /prefix, reply to bot)
-- If not triggered: classify silently, log, do NOT respond
-- If triggered: queue for AI processing
+- Determine message type: customer inbound (field: "messages") or owner echo (field: "smb_message_echoes" / "message_echoes")
+- Customer inbound: classify via AI, create pending_order if NEW_ORDER, bot stays silent
+- Owner echo: run echo loop guard (wamid check), then route to flow engine for affirmation/confirmation
+- See docs/architecture/MESSAGE_PIPELINE.md for the full flow
 Include proper error handling and Sentry logging."
 ```
 
@@ -273,15 +277,19 @@ Also build src/lib/ai/model-router.ts:
 ```
 
 **Session 6: Interactive Message Builders (2 hours)**
+
+> **NOTE (post-S5):** `src/config/whatsapp-menus.ts` and the owner-initiated guided menu flow have been deprecated in favour of the customer-initiated echo-confirmed architecture. `buildMainMenu`, `buildCustomerList`, and `buildVendorList` were removed from `src/lib/whatsapp/interactive.ts`. The remaining builders (draft, clarification, production, status) are still in use. The `/api/whatsapp/menu` route is deprecated (see N8N_PIPELINE.md). If you rebuild this sprint from scratch, skip the menu builders and `whatsapp-menus.ts`.
+
 ```
-"Build src/lib/whatsapp/interactive.ts and src/config/whatsapp-menus.ts:
-- buildMainMenu(orgTier) → shows features available for their tier
-- buildCustomerList(orgId) → recent + frequent customers as list message
+"Build src/lib/whatsapp/interactive.ts:
 - buildProductList(orgId, customerId?) → products, sorted by frequency
-- buildVendorList(orgId) → vendors as list message
-- buildConfirmation(type, data) → confirmation message with Yes/Edit/Cancel buttons
 - buildClarification(options[]) → 'Did you mean...' with alternatives
-All builders respect org tier — don't show tier_2 features to tier_1 orgs."
+- buildOrderDraft(data) → draft posted after owner AFFIRM
+- buildModificationDraft(data) → modification draft
+- buildCancellationDraft(data) → cancellation draft
+- buildOrderListForProduction(orgId) → in-production orders list
+- buildStatusSummary(data) → /status reply for owner
+All builders use the admin client."
 ```
 
 **Session 7: n8n Workflow — Message Handler (2-3 hours)**
@@ -305,9 +313,10 @@ Every HTTP node sends the x-internal-api-key header ($env.INTERNAL_API_KEY)."
 ```
 
 Also build the Next.js callback routes the workflow targets:
+- `/api/whatsapp/flow` — flow engine: handleCustomerMessage / handleOwnerEcho
 - `/api/ai` — classify → fuzzy-resolve (Layer 4) → eval gate → routing decision
 - `/api/whatsapp/send` — forward a built Meta message body to the Cloud API
-- `/api/whatsapp/menu` — build main/sub menu (return for two-step, or send directly)
+- `/api/whatsapp/menu` — DEPRECATED (see N8N_PIPELINE.md); skip in new builds
 - `/api/session/store` — persist guided-flow state to `whatsapp_sessions`
 - `/api/analytics/log-intent` — PostHog capture (privacy-safe, no raw body/phone)
 - `/api/errors/log` — structured error sink (Sentry hook point)
