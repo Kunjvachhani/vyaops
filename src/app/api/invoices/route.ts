@@ -1,3 +1,4 @@
+import { createHash } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { createClient, getCurrentUser } from '@/lib/supabase/server'
@@ -162,7 +163,30 @@ export async function POST(req: NextRequest) {
 
   const { orderId, taxRate, dueDate, subtotalPaise: subtotalOverride, notes } = parsed.data
 
+  // Idempotency: caller-supplied X-Idempotency-Key header → return existing invoice on retry.
+  const callerKey = req.headers.get('x-idempotency-key')?.trim()
+  const idempotencyKey = callerKey
+    ? createHash('sha256').update(`${user.org_id}:${callerKey}`).digest('hex')
+    : null
+
   const supabase = await createClient()
+
+  if (idempotencyKey) {
+    const { data: existingRaw } = await supabase
+      .from('invoices')
+      .select('*')
+      .eq('organization_id', user.org_id)
+      .eq('idempotency_key', idempotencyKey)
+      .is('deleted_at', null)
+      .maybeSingle()
+
+    if (existingRaw) {
+      return NextResponse.json(
+        { data: existingRaw as unknown as InvoiceRow, idempotent: true },
+        { status: 200 }
+      )
+    }
+  }
 
   // Verify the order belongs to this org and is completed/dispatched (invoiceable).
   const { data: orderRaw } = await supabase
@@ -268,6 +292,7 @@ export async function POST(req: NextRequest) {
       status: 'draft',
       due_date: dueDate,
       notes: notes ?? null,
+      idempotency_key: idempotencyKey ?? null,
     })
     .select()
     .single()

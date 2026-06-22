@@ -667,6 +667,7 @@ export type Database = {
           deleted_at: string | null
           due_date: string
           id: string
+          idempotency_key: string | null
           invoice_number: string
           last_reminder_at: string | null
           notes: string | null
@@ -692,6 +693,7 @@ export type Database = {
           deleted_at?: string | null
           due_date: string
           id?: string
+          idempotency_key?: string | null
           invoice_number: string
           last_reminder_at?: string | null
           notes?: string | null
@@ -717,6 +719,7 @@ export type Database = {
           deleted_at?: string | null
           due_date?: string
           id?: string
+          idempotency_key?: string | null
           invoice_number?: string
           last_reminder_at?: string | null
           notes?: string | null

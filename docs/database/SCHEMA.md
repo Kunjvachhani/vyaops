@@ -180,6 +180,7 @@ sent_via_whatsapp   BOOLEAN DEFAULT FALSE
 sent_at             TIMESTAMPTZ
 reminder_count      INTEGER DEFAULT 0                -- how many reminders sent
 last_reminder_at    TIMESTAMPTZ
+idempotency_key     TEXT UNIQUE                      -- SHA-256(org_id:X-Idempotency-Key) for retry resilience
 notes               TEXT
 created_at, updated_at, deleted_at (standard)
 ```
