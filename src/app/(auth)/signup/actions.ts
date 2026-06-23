@@ -13,7 +13,8 @@ export async function signupAction(formData: FormData): Promise<SignupResult> {
   const companyName = formData.get('companyName') as string
   const city = formData.get('city') as string
   const industry = formData.get('industry') as string
-  const role = (formData.get('role') as string) || 'owner'
+  // Self-signup always produces an owner — staff are invited by the owner, not self-registered.
+  const role = 'owner'
   const address = (formData.get('address') as string | null) || null
   const gstin = ((formData.get('gstin') as string | null) || '').trim().toUpperCase() || null
   const tier = (formData.get('tier') as string) || 'tier_1'
@@ -82,8 +83,9 @@ export async function signupAction(formData: FormData): Promise<SignupResult> {
 
     // 4. Stamp org_id + role into auth metadata so middleware/getCurrentUser/RLS can read them.
     // SECURITY: the authoritative copy lives in app_metadata — users CANNOT self-edit it
-    // (only the service-role key can write it). user_metadata is mirrored only for backward
-    // compatibility during the migration window and can be dropped in a later cleanup sprint.
+    // (only the service-role key can write it). user_metadata is mirrored for the migration
+    // window only and can be dropped in a later cleanup sprint.
+    // CRITICAL: this is a hard failure — a user without app_metadata is stuck in a broken state.
     const { error: metaError } = await adminClient.auth.admin.updateUserById(authUserId, {
       app_metadata: { org_id: orgId, role },
       user_metadata: { org_id: orgId, role },
@@ -91,6 +93,8 @@ export async function signupAction(formData: FormData): Promise<SignupResult> {
 
     if (metaError) {
       captureWithContext(new Error(metaError.message), { action: 'signup/updateUserById' })
+      await adminClient.auth.admin.deleteUser(authUserId)
+      return { error: 'Account created but role assignment failed. Please try again.' }
     }
 
     // Refresh the session so the new JWT includes org_id + role in user_metadata.

@@ -28,18 +28,10 @@ const signupSchema = z.object({
     .optional()
     .refine((v) => !v || GSTIN_REGEX.test(v.toUpperCase()), { message: 'gstin' }),
   industry: z.string().min(1),
-  role: z.string().min(1),
 })
 
 type Fields = z.infer<typeof signupSchema>
 type FieldErrors = Partial<Record<keyof Fields, string>>
-
-const ROLES = [
-  { value: 'owner', labelKey: 'auth.roleOwner' },
-  { value: 'manager', labelKey: 'auth.roleManager' },
-  { value: 'worker', labelKey: 'auth.roleWorker' },
-  { value: 'viewer', labelKey: 'auth.roleViewer' },
-] as const
 
 const selectClass =
   'flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50'
@@ -74,7 +66,6 @@ export default function SignupPage() {
       city: formData.get('city'),
       gstin: formData.get('gstin') || undefined,
       industry: formData.get('industry'),
-      role: formData.get('role'),
     })
 
     if (!parsed.success) {
@@ -254,30 +245,6 @@ export default function SignupPage() {
             </select>
             {fieldErrors.industry && (
               <p className="text-xs text-destructive">{fieldErrors.industry}</p>
-            )}
-          </div>
-
-          {/* Role */}
-          <div className="space-y-2">
-            <Label htmlFor="role">{t('auth.yourRole')}</Label>
-            <select
-              id="role"
-              name="role"
-              required
-              defaultValue=""
-              className={selectClass}
-            >
-              <option value="" disabled>
-                {t('auth.selectRole')}
-              </option>
-              {ROLES.map((r) => (
-                <option key={r.value} value={r.value}>
-                  {t(r.labelKey)}
-                </option>
-              ))}
-            </select>
-            {fieldErrors.role && (
-              <p className="text-xs text-destructive">{fieldErrors.role}</p>
             )}
           </div>
 
