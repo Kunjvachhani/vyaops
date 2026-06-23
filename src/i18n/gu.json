@@ -461,6 +461,7 @@
       "summary": {
         "totalItems": "કુલ વસ્તુઓ",
         "lowStock": "ઓછો સ્ટૉક",
+        "criticalStock": "જટિલ",
         "rawMaterials": "કાચો માલ",
         "finishedGoods": "તૈયાર માલ"
       },
@@ -474,11 +475,15 @@
         "item": "વસ્તુ",
         "type": "પ્રકાર",
         "currentStock": "હાલનો સ્ટૉક",
+        "minimumStock": "ન્યૂનતમ સ્ટૉક",
+        "unit": "એકમ",
         "reorderLevel": "રીઓર્ડર સ્તર",
         "lastRestocked": "છેલ્લો ભરાવ",
+        "lastUpdated": "છેલ્લો અપડેટ",
         "status": "સ્થિતિ",
         "actions": "ક્રિયાઓ",
-        "noData": "કોઈ ઇન્વેન્ટ્રી વસ્તુ મળી નથી."
+        "noData": "કોઈ ઇન્વેન્ટ્રી વસ્તુ મળી નથી.",
+        "searchPlaceholder": "ઉત્પાદ નામ દ્વારા શોધો..."
       },
       "itemTypes": {
         "raw_material": "કાચો માલ",
@@ -486,7 +491,9 @@
       },
       "status": {
         "lowStock": "ઓછો સ્ટૉક",
-        "ok": "ઠીક"
+        "ok": "ઠીક",
+        "low": "ઓછો",
+        "critical": "જટિલ"
       },
       "adjust": {
         "button": "ઍડ્જસ્ટ",
@@ -503,6 +510,9 @@
         "submitting": "લાગુ કરી રહ્યા છીએ...",
         "cancel": "રદ કરો",
         "error": "સ્ટૉક ઍડ્જસ્ટ કરવામાં નિષ્ફળ. ફરી પ્રયાસ કરો.",
+        "selectProduct": "ઉત્પાદ પસંદ કરો",
+        "notesLabel": "નોંધ",
+        "notesPlaceholder": "વૈકલ્પિક વિગતો...",
         "reasons": {
           "vendor_receipt": "વિક્રેતા પાસેથી મળ્યો",
           "damaged": "નુકસાન / ભંગાર",
@@ -510,6 +520,17 @@
           "return": "ગ્રાહક વળતર",
           "other": "અન્ય"
         }
+      },
+      "movements": {
+        "title": "સ્ટૉક હલનચલન ઇતિહાસ",
+        "date": "તારીખ",
+        "change": "ફેરફાર",
+        "reason": "કારણ",
+        "by": "દ્વારા",
+        "balance": "પછીનો સ્ટૉક",
+        "noData": "છેલ્લા 30 દિવસમાં કોઈ હલનચલન નહીં.",
+        "loading": "ઇતિહાસ લોડ થઈ રહ્યો છે...",
+        "error": "ઇતિહાસ લોડ કરવામાં નિષ્ફળ."
       }
     },
     "cashFlow": {

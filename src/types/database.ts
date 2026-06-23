@@ -604,6 +604,7 @@ export type Database = {
           id: string
           inventory_id: string
           movement_type: string
+          notes: string | null
           organization_id: string
           quantity: number
           reason: string
@@ -617,6 +618,7 @@ export type Database = {
           id?: string
           inventory_id: string
           movement_type: string
+          notes?: string | null
           organization_id: string
           quantity: number
           reason: string
@@ -630,6 +632,7 @@ export type Database = {
           id?: string
           inventory_id?: string
           movement_type?: string
+          notes?: string | null
           organization_id?: string
           quantity?: number
           reason?: string

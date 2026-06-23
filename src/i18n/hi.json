@@ -461,6 +461,7 @@
       "summary": {
         "totalItems": "कुल आइटम",
         "lowStock": "कम स्टॉक",
+        "criticalStock": "गंभीर",
         "rawMaterials": "कच्चा माल",
         "finishedGoods": "तैयार माल"
       },
@@ -474,11 +475,15 @@
         "item": "आइटम",
         "type": "प्रकार",
         "currentStock": "वर्तमान स्टॉक",
+        "minimumStock": "न्यूनतम स्टॉक",
+        "unit": "इकाई",
         "reorderLevel": "रीऑर्डर स्तर",
         "lastRestocked": "अंतिम भरावट",
+        "lastUpdated": "अंतिम अपडेट",
         "status": "स्थिति",
         "actions": "कार्रवाई",
-        "noData": "कोई इन्वेंटरी आइटम नहीं मिला।"
+        "noData": "कोई इन्वेंटरी आइटम नहीं मिला।",
+        "searchPlaceholder": "उत्पाद नाम से खोजें..."
       },
       "itemTypes": {
         "raw_material": "कच्चा माल",
@@ -486,7 +491,9 @@
       },
       "status": {
         "lowStock": "कम स्टॉक",
-        "ok": "ठीक"
+        "ok": "ठीक",
+        "low": "कम",
+        "critical": "गंभीर"
       },
       "adjust": {
         "button": "एडजस्ट",
@@ -503,6 +510,9 @@
         "submitting": "लागू हो रहा है...",
         "cancel": "रद्द करें",
         "error": "स्टॉक एडजस्ट नहीं हो सका। फिर से प्रयास करें।",
+        "selectProduct": "उत्पाद चुनें",
+        "notesLabel": "नोट्स",
+        "notesPlaceholder": "वैकल्पिक विवरण...",
         "reasons": {
           "vendor_receipt": "विक्रेता से प्राप्त",
           "damaged": "क्षतिग्रस्त / रद्दी",
@@ -510,6 +520,17 @@
           "return": "ग्राहक वापसी",
           "other": "अन्य"
         }
+      },
+      "movements": {
+        "title": "स्टॉक मूवमेंट इतिहास",
+        "date": "तारीख",
+        "change": "बदलाव",
+        "reason": "कारण",
+        "by": "द्वारा",
+        "balance": "बाद में शेष",
+        "noData": "पिछले 30 दिनों में कोई मूवमेंट नहीं।",
+        "loading": "इतिहास लोड हो रहा है...",
+        "error": "इतिहास लोड नहीं हो सका।"
       }
     },
     "cashFlow": {

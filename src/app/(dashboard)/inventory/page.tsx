@@ -79,6 +79,7 @@ async function InventoryData({ orgId }: { orgId: string }) {
     product_id: row.product_id,
     product_name: row.products?.name ?? null,
     last_restocked_at: row.last_restocked_at,
+    updated_at: row.updated_at,
   }))
 
   const summary: InventorySummary = {

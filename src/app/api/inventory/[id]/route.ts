@@ -8,6 +8,7 @@ import { manualAdjustmentSchema } from '@/lib/validations/inventory'
 
 type InventoryRow = Database['public']['Tables']['inventory']['Row']
 type UserRow = Database['public']['Tables']['users']['Row']
+type MovementRow = Database['public']['Tables']['inventory_movements']['Row']
 
 type AsSingle<T> = T | null
 
@@ -15,6 +16,64 @@ type RouteContext = { params: Promise<{ id: string }> }
 
 function getIp(req: NextRequest): string {
   return req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? ''
+}
+
+// GET /api/inventory/[id]
+// Returns stock movement history for the last 30 days.
+export async function GET(_req: NextRequest, { params }: RouteContext) {
+  const { id } = await params
+  const user = await getCurrentUser()
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, { status: 401 })
+  }
+
+  const supabase = await createClient()
+
+  const { data: invRaw, error: invErr } = await supabase
+    .from('inventory')
+    .select('id')
+    .eq('id', id)
+    .eq('organization_id', user.org_id)
+    .is('deleted_at', null)
+    .single()
+
+  if (invErr || !invRaw) {
+    return NextResponse.json({ error: 'Inventory item not found', code: 'NOT_FOUND' }, { status: 404 })
+  }
+
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+
+  const { data: rawMovements, error: movErr } = await supabase
+    .from('inventory_movements')
+    .select('*, users(name)')
+    .eq('inventory_id', id)
+    .eq('organization_id', user.org_id)
+    .gte('created_at', thirtyDaysAgo)
+    .order('created_at', { ascending: false })
+    .limit(100)
+
+  if (movErr) {
+    captureWithContext(movErr, {
+      action: 'GET /api/inventory/[id]',
+      inventory_id: id,
+      org_id: user.org_id,
+    })
+    return NextResponse.json({ error: 'Failed to fetch movements', code: 'DB_ERROR' }, { status: 500 })
+  }
+
+  type MovementWithUser = MovementRow & { users: { name: string } | null }
+
+  const movements = ((rawMovements ?? []) as unknown as MovementWithUser[]).map((m) => ({
+    id: m.id,
+    created_at: m.created_at,
+    quantity: m.quantity,
+    reason: m.reason,
+    notes: m.notes,
+    balance_after: m.balance_after,
+    created_by_name: m.users?.name ?? null,
+  }))
+
+  return NextResponse.json({ data: movements })
 }
 
 // PATCH /api/inventory/[id]
@@ -45,11 +104,10 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
     )
   }
 
-  const { change_quantity, reason } = parsed.data
+  const { change_quantity, reason, notes } = parsed.data
 
   const supabase = await createClient()
 
-  // Verify item belongs to this org.
   const { data: invRaw, error: fetchErr } = await supabase
     .from('inventory')
     .select('*')
@@ -65,7 +123,6 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
   const inv = invRaw as unknown as InventoryRow
   const newQuantity = inv.current_quantity + change_quantity
 
-  // Resolve VyaOps users.id for the created_by FK.
   const { data: userRecordRaw } = await supabase
     .from('users')
     .select('id')
@@ -76,7 +133,6 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
 
   const createdBy: string | null = (userRecordRaw as AsSingle<Pick<UserRow, 'id'>>)?.id ?? null
 
-  // Update stock level. Add last_restocked_at if it's a positive adjustment.
   const updatePayload: Database['public']['Tables']['inventory']['Update'] = {
     current_quantity: newQuantity,
     ...(change_quantity > 0 ? { last_restocked_at: new Date().toISOString() } : {}),
@@ -99,13 +155,13 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: 'Failed to update inventory', code: 'DB_ERROR' }, { status: 500 })
   }
 
-  // Log movement (append-only).
   const { error: movErr } = await adminClient.from('inventory_movements').insert({
     organization_id: user.org_id,
     inventory_id: id,
     movement_type: 'adjustment',
     quantity: change_quantity,
     reason,
+    notes: notes ?? null,
     reference_type: null,
     reference_id: null,
     balance_after: newQuantity,

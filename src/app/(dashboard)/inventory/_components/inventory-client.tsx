@@ -1,11 +1,22 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
-import { AlertTriangle, Package, Boxes, Factory } from 'lucide-react'
+import {
+  Package,
+  AlertTriangle,
+  AlertCircle,
+  Search,
+  Plus,
+  ChevronRight,
+  ChevronDown,
+  TrendingUp,
+  TrendingDown,
+} from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
 import {
   Table,
   TableBody,
@@ -21,9 +32,10 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
+import { ADJUSTMENT_REASONS } from '@/lib/validations/inventory'
 import type { AdjustmentReason } from '@/lib/validations/inventory'
 
 export interface InventoryItem {
@@ -37,6 +49,7 @@ export interface InventoryItem {
   product_id: string | null
   product_name: string | null
   last_restocked_at: string | null
+  updated_at: string
 }
 
 export interface InventorySummary {
@@ -46,404 +59,657 @@ export interface InventorySummary {
   finished_good_count: number
 }
 
-type FilterTab = 'all' | 'raw_material' | 'finished_good' | 'low_stock'
+type StockStatus = 'ok' | 'low' | 'critical'
+type ActiveFilter = 'all' | 'low_and_critical' | 'critical'
 
-type AdjustDirection = 'add' | 'remove'
-
-interface AdjustDialogState {
-  item: InventoryItem
-  direction: AdjustDirection
-  quantity: string
-  reason: AdjustmentReason
-  error: string | null
+interface Movement {
+  id: string
+  created_at: string
+  quantity: number
+  reason: string
+  notes: string | null
+  balance_after: number
+  created_by_name: string | null
 }
+
+function getStatus(item: InventoryItem): StockStatus {
+  if (item.current_quantity < item.reorder_level) return 'critical'
+  if (item.current_quantity < item.reorder_level * 1.5) return 'low'
+  return 'ok'
+}
+
+const STATUS_ORDER: Record<StockStatus, number> = { critical: 0, low: 1, ok: 2 }
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Asia/Kolkata',
+  })
+}
+
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Asia/Kolkata',
+  })
+}
+
+// ─── Status Badge ─────────────────────────────────────────────────────────────
+
+type TFunc = ReturnType<typeof useTranslations<'pages.inventory'>>
+
+function StatusBadge({ status, t }: { status: StockStatus; t: TFunc }) {
+  if (status === 'critical') {
+    return <Badge variant="destructive">{t('status.critical')}</Badge>
+  }
+  if (status === 'low') {
+    return (
+      <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-100">
+        {t('status.low')}
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="outline" className="text-green-700 border-green-200 bg-green-50">
+      {t('status.ok')}
+    </Badge>
+  )
+}
+
+// ─── Summary Card ─────────────────────────────────────────────────────────────
+
+function SummaryCard({
+  label,
+  value,
+  icon: Icon,
+  variant = 'default',
+  active,
+  onClick,
+}: {
+  label: string
+  value: number
+  icon: React.ElementType
+  variant?: 'default' | 'warning' | 'destructive'
+  active?: boolean
+  onClick: () => void
+}) {
+  return (
+    <Card
+      className={cn('cursor-pointer transition-colors hover:bg-muted/50', active && 'ring-2 ring-primary')}
+      onClick={onClick}
+    >
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
+        <Icon
+          className={cn(
+            'h-4 w-4',
+            variant === 'warning' && 'text-yellow-600',
+            variant === 'destructive' && 'text-destructive',
+            variant === 'default' && 'text-muted-foreground'
+          )}
+        />
+      </CardHeader>
+      <CardContent>
+        <p
+          className={cn(
+            'text-2xl font-bold',
+            variant === 'warning' && value > 0 && 'text-yellow-700',
+            variant === 'destructive' && value > 0 && 'text-destructive'
+          )}
+        >
+          {value}
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ─── Movement History ─────────────────────────────────────────────────────────
+
+const REASON_LABEL: Record<string, string> = {
+  vendor_receipt: 'Received from vendor',
+  damaged: 'Damaged / scrapped',
+  physical_count: 'Physical count correction',
+  return: 'Customer return',
+  other: 'Other',
+}
+
+function MovementHistory({
+  movements,
+  loading,
+  error,
+  t,
+}: {
+  movements: Movement[] | undefined
+  loading: boolean
+  error: string | undefined
+  t: TFunc
+}) {
+  if (loading) return <p className="py-2 text-sm text-muted-foreground">{t('movements.loading')}</p>
+  if (error) return <p className="py-2 text-sm text-destructive">{t('movements.error')}</p>
+  if (!movements || movements.length === 0) {
+    return <p className="py-2 text-sm text-muted-foreground">{t('movements.noData')}</p>
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {t('movements.title')}
+      </p>
+      <Table>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="h-8 text-xs">{t('movements.date')}</TableHead>
+            <TableHead className="h-8 text-right text-xs">{t('movements.change')}</TableHead>
+            <TableHead className="h-8 text-right text-xs">{t('movements.balance')}</TableHead>
+            <TableHead className="h-8 text-xs">{t('movements.reason')}</TableHead>
+            <TableHead className="h-8 text-xs">{t('movements.by')}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {movements.map((m) => (
+            <TableRow key={m.id} className="hover:bg-transparent">
+              <TableCell className="py-1.5 text-sm text-muted-foreground">
+                {formatDateTime(m.created_at)}
+              </TableCell>
+              <TableCell className="py-1.5 text-right font-mono">
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-0.5 font-medium',
+                    m.quantity > 0 ? 'text-green-700' : 'text-destructive'
+                  )}
+                >
+                  {m.quantity > 0 ? (
+                    <TrendingUp className="h-3 w-3" />
+                  ) : (
+                    <TrendingDown className="h-3 w-3" />
+                  )}
+                  {m.quantity > 0 ? '+' : ''}
+                  {m.quantity}
+                </span>
+              </TableCell>
+              <TableCell className="py-1.5 text-right font-mono text-sm">{m.balance_after}</TableCell>
+              <TableCell className="py-1.5 text-sm">
+                <span className="text-muted-foreground">{REASON_LABEL[m.reason] ?? m.reason}</span>
+                {m.notes && (
+                  <span className="ml-1 text-xs text-muted-foreground/70">— {m.notes}</span>
+                )}
+              </TableCell>
+              <TableCell className="py-1.5 text-sm text-muted-foreground">
+                {m.created_by_name ?? '—'}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
+// ─── Adjust Dialog ────────────────────────────────────────────────────────────
+
+function AdjustDialog({
+  items,
+  initialItem,
+  onClose,
+  onSuccess,
+  t,
+}: {
+  items: InventoryItem[]
+  initialItem: InventoryItem | null
+  onClose: () => void
+  onSuccess: (inventoryId: string, newQty: number) => void
+  t: TFunc
+}) {
+  const [selectedId, setSelectedId] = useState<string>(initialItem?.id ?? '')
+  const [direction, setDirection] = useState<'add' | 'remove'>('add')
+  const [qty, setQty] = useState('')
+  const [reason, setReason] = useState<AdjustmentReason | ''>('')
+  const [notes, setNotes] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const selectedItem = items.find((i) => i.id === selectedId) ?? null
+  const qtyNum = parseInt(qty, 10)
+  const changeQty = direction === 'add' ? qtyNum : -qtyNum
+  const newQty =
+    selectedItem != null && !isNaN(qtyNum) ? selectedItem.current_quantity + changeQty : null
+  const willGoBelowMin =
+    newQty != null && selectedItem != null && newQty < selectedItem.reorder_level
+
+  const isValid = selectedId !== '' && reason !== '' && qty !== '' && !isNaN(qtyNum) && qtyNum > 0
+
+  async function handleSubmit() {
+    if (!isValid) return
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/inventory/${selectedId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          change_quantity: changeQty,
+          reason,
+          notes: notes.trim() || undefined,
+        }),
+      })
+      if (!res.ok) {
+        const json = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(json.error ?? 'Failed')
+      }
+      const json = (await res.json()) as { data: { current_quantity: number } }
+      onSuccess(selectedId, json.data.current_quantity)
+    } catch {
+      setError(t('adjust.error'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t('adjust.title')}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* Product selector */}
+          <div className="space-y-1.5">
+            <Label>{t('table.item')}</Label>
+            <select
+              value={selectedId}
+              onChange={(e) => setSelectedId(e.target.value)}
+              disabled={initialItem != null}
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <option value="">{t('adjust.selectProduct')}</option>
+              {items.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.item_name}
+                </option>
+              ))}
+            </select>
+            {selectedItem && (
+              <p className="text-xs text-muted-foreground">
+                {t('adjust.currentStock')}: {selectedItem.current_quantity} {selectedItem.unit}
+              </p>
+            )}
+          </div>
+
+          {/* Direction */}
+          <div className="space-y-1.5">
+            <Label>{t('adjust.directionLabel')}</Label>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={direction === 'add' ? 'default' : 'outline'}
+                size="sm"
+                className="flex-1"
+                onClick={() => setDirection('add')}
+              >
+                {t('adjust.add')}
+              </Button>
+              <Button
+                type="button"
+                variant={direction === 'remove' ? 'destructive' : 'outline'}
+                size="sm"
+                className="flex-1"
+                onClick={() => setDirection('remove')}
+              >
+                {t('adjust.remove')}
+              </Button>
+            </div>
+          </div>
+
+          {/* Quantity */}
+          <div className="space-y-1.5">
+            <Label htmlFor="adj-qty">{t('adjust.quantityLabel')}</Label>
+            <Input
+              id="adj-qty"
+              type="number"
+              min={1}
+              value={qty}
+              onChange={(e) => setQty(e.target.value)}
+              placeholder="0"
+            />
+            {qty !== '' && (isNaN(qtyNum) || qtyNum <= 0) && (
+              <p className="text-xs text-destructive">{t('adjust.invalidQty')}</p>
+            )}
+          </div>
+
+          {/* Reason */}
+          <div className="space-y-1.5">
+            <Label htmlFor="adj-reason">{t('adjust.reasonLabel')}</Label>
+            <select
+              id="adj-reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value as AdjustmentReason)}
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">—</option>
+              {ADJUSTMENT_REASONS.map((r) => (
+                <option key={r} value={r}>
+                  {t(`adjust.reasons.${r}`)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Notes */}
+          <div className="space-y-1.5">
+            <Label htmlFor="adj-notes">
+              {t('adjust.notesLabel')}{' '}
+              <span className="text-xs text-muted-foreground">({t('common.optional')})</span>
+            </Label>
+            <Textarea
+              id="adj-notes"
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder={t('adjust.notesPlaceholder')}
+              maxLength={500}
+            />
+          </div>
+
+          {/* Low-stock warning */}
+          {willGoBelowMin && (
+            <p className="rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
+              {t('adjust.lowStockWarning')}
+            </p>
+          )}
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={loading}>
+            {t('adjust.cancel')}
+          </Button>
+          <Button onClick={handleSubmit} disabled={!isValid || loading}>
+            {loading ? t('adjust.submitting') : t('adjust.submit')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 export function InventoryClient({
   initialItems,
-  summary: initialSummary,
+  summary,
 }: {
   initialItems: InventoryItem[]
   summary: InventorySummary
 }) {
   const t = useTranslations('pages.inventory')
-  const [items, setItems] = useState<InventoryItem[]>(initialItems)
-  const [summary, setSummary] = useState<InventorySummary>(initialSummary)
-  const [activeTab, setActiveTab] = useState<FilterTab>('all')
-  const [dialog, setDialog] = useState<AdjustDialogState | null>(null)
-  const [isPending, startTransition] = useTransition()
 
-  const filteredItems = items.filter((item) => {
-    if (activeTab === 'raw_material') return item.item_type === 'raw_material'
-    if (activeTab === 'finished_good') return item.item_type === 'finished_good'
-    if (activeTab === 'low_stock') return item.is_low_stock
-    return true
-  })
+  const [items, setItems] = useState(initialItems)
+  const [search, setSearch] = useState('')
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter>('all')
+  const [adjustDialogOpen, setAdjustDialogOpen] = useState(false)
+  const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null)
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  const [movements, setMovements] = useState<Record<string, Movement[]>>({})
+  const [movementsLoading, setMovementsLoading] = useState<Set<string>>(new Set())
+  const [movementsError, setMovementsError] = useState<Record<string, string>>({})
 
-  function openAdjustDialog(item: InventoryItem) {
-    setDialog({
-      item,
-      direction: 'add',
-      quantity: '',
-      reason: 'vendor_receipt',
-      error: null,
-    })
-  }
+  const criticalCount = useMemo(
+    () => items.filter((i) => getStatus(i) === 'critical').length,
+    [items]
+  )
+  const lowAndCriticalCount = useMemo(
+    () => items.filter((i) => getStatus(i) !== 'ok').length,
+    [items]
+  )
 
-  function closeDialog() {
-    setDialog(null)
-  }
+  const filtered = useMemo(() => {
+    let result = items
 
-  function handleDirectionChange(direction: AdjustDirection) {
-    if (!dialog) return
-    setDialog({
-      ...dialog,
-      direction,
-      reason: direction === 'add' ? 'vendor_receipt' : 'damaged',
-      error: null,
-    })
-  }
-
-  function handleSubmit() {
-    if (!dialog) return
-
-    const qty = parseFloat(dialog.quantity)
-    if (!dialog.quantity || isNaN(qty) || qty <= 0) {
-      setDialog({ ...dialog, error: t('adjust.invalidQty') })
-      return
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      result = result.filter((i) => i.item_name.toLowerCase().includes(q))
     }
 
-    const changeQuantity = dialog.direction === 'add' ? qty : -qty
+    if (activeFilter === 'critical') {
+      result = result.filter((i) => getStatus(i) === 'critical')
+    } else if (activeFilter === 'low_and_critical') {
+      result = result.filter((i) => getStatus(i) !== 'ok')
+    }
 
-    startTransition(async () => {
-      try {
-        const res = await fetch(`/api/inventory/${dialog.item.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ change_quantity: changeQuantity, reason: dialog.reason }),
-        })
+    return [...result].sort((a, b) => {
+      const diff = STATUS_ORDER[getStatus(a)] - STATUS_ORDER[getStatus(b)]
+      if (diff !== 0) return diff
+      return a.item_name.localeCompare(b.item_name)
+    })
+  }, [items, search, activeFilter])
 
-        if (!res.ok) {
-          setDialog({ ...dialog, error: t('adjust.error') })
-          return
-        }
+  async function loadMovements(id: string) {
+    setMovementsLoading((prev) => new Set(prev).add(id))
+    try {
+      const res = await fetch(`/api/inventory/${id}`)
+      if (!res.ok) throw new Error('Failed')
+      const json = (await res.json()) as { data: Movement[] }
+      setMovements((prev) => ({ ...prev, [id]: json.data }))
+    } catch {
+      setMovementsError((prev) => ({ ...prev, [id]: t('movements.error') }))
+    } finally {
+      setMovementsLoading((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    }
+  }
 
-        const json = (await res.json()) as { data: InventoryItem & { is_low_stock: boolean } }
-        const updated = json.data
-
-        setItems((prev) => {
-          const next = prev.map((i) =>
-            i.id === updated.id
-              ? { ...i, current_quantity: updated.current_quantity, is_low_stock: updated.is_low_stock }
-              : i
-          )
-          setSummary({
-            total_items: next.length,
-            low_stock_count: next.filter((i) => i.is_low_stock).length,
-            raw_material_count: next.filter((i) => i.item_type === 'raw_material').length,
-            finished_good_count: next.filter((i) => i.item_type === 'finished_good').length,
-          })
-          return next
-        })
-
-        closeDialog()
-      } catch {
-        setDialog({ ...dialog, error: t('adjust.error') })
+  function toggleExpand(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+        if (!movements[id]) loadMovements(id)
       }
+      return next
     })
   }
 
-  const tabButtons: { key: FilterTab; label: string; count: number }[] = [
-    { key: 'all', label: t('filters.all'), count: summary.total_items },
-    { key: 'raw_material', label: t('filters.raw_material'), count: summary.raw_material_count },
-    { key: 'finished_good', label: t('filters.finished_good'), count: summary.finished_good_count },
-    { key: 'low_stock', label: t('filters.low_stock'), count: summary.low_stock_count },
-  ]
+  function handleAdjustOpen(item: InventoryItem | null) {
+    setAdjustItem(item)
+    setAdjustDialogOpen(true)
+  }
 
-  const addReasons: AdjustmentReason[] = ['vendor_receipt', 'return', 'other']
-  const removeReasons: AdjustmentReason[] = ['damaged', 'physical_count', 'other']
-  const reasonOptions = dialog?.direction === 'add' ? addReasons : removeReasons
-
-  const willBeLowStock =
-    dialog
-      ? (() => {
-          const qty = parseFloat(dialog.quantity)
-          if (isNaN(qty) || qty <= 0) return false
-          const changeQty = dialog.direction === 'add' ? qty : -qty
-          return dialog.item.current_quantity + changeQty <= dialog.item.reorder_level
-        })()
-      : false
+  function handleAdjustSuccess(inventoryId: string, newQty: number) {
+    setItems((prev) =>
+      prev.map((i) =>
+        i.id !== inventoryId
+          ? i
+          : {
+              ...i,
+              current_quantity: newQty,
+              is_low_stock: newQty <= i.reorder_level,
+              updated_at: new Date().toISOString(),
+            }
+      )
+    )
+    // Invalidate movement cache; reload if currently expanded
+    setMovements((prev) => {
+      const next = { ...prev }
+      delete next[inventoryId]
+      return next
+    })
+    if (expandedIds.has(inventoryId)) loadMovements(inventoryId)
+    setAdjustDialogOpen(false)
+    setAdjustItem(null)
+  }
 
   return (
     <div className="space-y-6">
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <Package className="h-4 w-4" />
-              {t('summary.totalItems')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{summary.total_items}</p>
-          </CardContent>
-        </Card>
-
-        <Card className={summary.low_stock_count > 0 ? 'border-destructive/60' : ''}>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <AlertTriangle className={cn('h-4 w-4', summary.low_stock_count > 0 && 'text-destructive')} />
-              {t('summary.lowStock')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className={cn('text-2xl font-bold', summary.low_stock_count > 0 && 'text-destructive')}>
-              {summary.low_stock_count}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <Boxes className="h-4 w-4" />
-              {t('summary.rawMaterials')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{summary.raw_material_count}</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <Factory className="h-4 w-4" />
-              {t('summary.finishedGoods')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{summary.finished_good_count}</p>
-          </CardContent>
-        </Card>
+      {/* Summary cards — click to filter */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <SummaryCard
+          label={t('summary.totalItems')}
+          value={summary.total_items}
+          icon={Package}
+          active={activeFilter === 'all'}
+          onClick={() => setActiveFilter('all')}
+        />
+        <SummaryCard
+          label={t('summary.lowStock')}
+          value={lowAndCriticalCount}
+          icon={AlertTriangle}
+          variant="warning"
+          active={activeFilter === 'low_and_critical'}
+          onClick={() =>
+            setActiveFilter((f) => (f === 'low_and_critical' ? 'all' : 'low_and_critical'))
+          }
+        />
+        <SummaryCard
+          label={t('summary.criticalStock')}
+          value={criticalCount}
+          icon={AlertCircle}
+          variant="destructive"
+          active={activeFilter === 'critical'}
+          onClick={() => setActiveFilter((f) => (f === 'critical' ? 'all' : 'critical'))}
+        />
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex flex-wrap gap-2">
-        {tabButtons.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={cn(
-              'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-              activeTab === tab.key
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground hover:bg-muted/80'
-            )}
-          >
-            {tab.label}
-            <span
-              className={cn(
-                'rounded-full px-1.5 py-0.5 text-xs',
-                activeTab === tab.key ? 'bg-primary-foreground/20' : 'bg-background'
-              )}
-            >
-              {tab.count}
-            </span>
-          </button>
-        ))}
+      {/* Search + global adjust button */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder={t('table.searchPlaceholder')}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Button onClick={() => handleAdjustOpen(null)}>
+          <Plus className="mr-2 h-4 w-4" />
+          {t('adjust.title')}
+        </Button>
       </div>
 
       {/* Inventory table */}
       <Card>
-        <CardContent className="pt-0">
-          {filteredItems.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">{t('table.noData')}</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t('table.item')}</TableHead>
-                  <TableHead className="hidden sm:table-cell">{t('table.type')}</TableHead>
-                  <TableHead className="text-right">{t('table.currentStock')}</TableHead>
-                  <TableHead className="hidden md:table-cell text-right">{t('table.reorderLevel')}</TableHead>
-                  <TableHead className="hidden lg:table-cell">{t('table.lastRestocked')}</TableHead>
-                  <TableHead>{t('table.status')}</TableHead>
-                  <TableHead className="text-right">{t('table.actions')}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredItems.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{item.item_name}</p>
-                        {item.product_name && (
-                          <p className="text-xs text-muted-foreground">{item.product_name}</p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell">
-                      <span className="text-sm text-muted-foreground">
-                        {item.item_type === 'raw_material'
-                          ? t('itemTypes.raw_material')
-                          : t('itemTypes.finished_good')}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <span className={cn('font-medium tabular-nums', item.is_low_stock && 'text-destructive')}>
-                        {item.current_quantity.toLocaleString('en-IN')} {item.unit}
-                      </span>
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell text-right text-sm text-muted-foreground tabular-nums">
-                      {item.reorder_level.toLocaleString('en-IN')} {item.unit}
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
-                      {item.last_restocked_at
-                        ? new Date(item.last_restocked_at).toLocaleDateString('en-IN', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                            timeZone: 'Asia/Kolkata',
-                          })
-                        : '—'}
-                    </TableCell>
-                    <TableCell>
-                      {item.is_low_stock ? (
-                        <Badge variant="destructive" className="gap-1 text-xs">
-                          <AlertTriangle className="h-3 w-3" />
-                          {t('status.lowStock')}
-                        </Badge>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-10" />
+              <TableHead>{t('table.item')}</TableHead>
+              <TableHead className="text-right">{t('table.currentStock')}</TableHead>
+              <TableHead className="text-right">{t('table.minimumStock')}</TableHead>
+              <TableHead>{t('table.unit')}</TableHead>
+              <TableHead>{t('table.status')}</TableHead>
+              <TableHead>{t('table.lastUpdated')}</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filtered.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                  {t('table.noData')}
+                </TableCell>
+              </TableRow>
+            )}
+            {filtered.map((item) => {
+              const status = getStatus(item)
+              const isExpanded = expandedIds.has(item.id)
+
+              return (
+                <>
+                  <TableRow
+                    key={item.id}
+                    className={cn(
+                      'cursor-pointer',
+                      status === 'critical' && 'bg-red-50/50 hover:bg-red-50',
+                      status === 'low' && 'bg-yellow-50/50 hover:bg-yellow-50',
+                      status === 'ok' && 'hover:bg-muted/50'
+                    )}
+                    onClick={() => toggleExpand(item.id)}
+                  >
+                    <TableCell className="pl-4">
+                      {isExpanded ? (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
                       ) : (
-                        <Badge variant="outline" className="text-xs text-green-600 border-green-200">
-                          {t('status.ok')}
-                        </Badge>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       )}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="font-medium">{item.item_name}</TableCell>
+                    <TableCell className="text-right font-mono font-semibold">
+                      {item.current_quantity}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-muted-foreground">
+                      {item.reorder_level}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{item.unit}</TableCell>
+                    <TableCell>
+                      <StatusBadge status={status} t={t} />
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {formatDate(item.updated_at)}
+                    </TableCell>
+                    <TableCell
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-right pr-4"
+                    >
                       <Button
-                        size="sm"
                         variant="outline"
-                        onClick={() => openAdjustDialog(item)}
+                        size="sm"
+                        onClick={() => handleAdjustOpen(item)}
                       >
                         {t('adjust.button')}
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
+
+                  {isExpanded && (
+                    <TableRow key={`${item.id}-history`}>
+                      <TableCell colSpan={8} className="bg-muted/20 px-6 py-3">
+                        <MovementHistory
+                          movements={movements[item.id]}
+                          loading={movementsLoading.has(item.id)}
+                          error={movementsError[item.id]}
+                          t={t}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </>
+              )
+            })}
+          </TableBody>
+        </Table>
       </Card>
 
-      {/* Adjustment dialog */}
-      <Dialog open={dialog !== null} onOpenChange={(open) => { if (!open) closeDialog() }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t('adjust.title')}</DialogTitle>
-            {dialog && (
-              <p className="text-sm text-muted-foreground">{dialog.item.item_name}</p>
-            )}
-          </DialogHeader>
-
-          {dialog && (
-            <div className="space-y-4 py-2">
-              {/* Direction toggle */}
-              <div className="space-y-1.5">
-                <Label>{t('adjust.directionLabel')}</Label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleDirectionChange('add')}
-                    className={cn(
-                      'flex-1 rounded-md border py-2 text-sm font-medium transition-colors',
-                      dialog.direction === 'add'
-                        ? 'border-primary bg-primary text-primary-foreground'
-                        : 'border-input bg-background hover:bg-muted'
-                    )}
-                  >
-                    + {t('adjust.add')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDirectionChange('remove')}
-                    className={cn(
-                      'flex-1 rounded-md border py-2 text-sm font-medium transition-colors',
-                      dialog.direction === 'remove'
-                        ? 'border-destructive bg-destructive text-destructive-foreground'
-                        : 'border-input bg-background hover:bg-muted'
-                    )}
-                  >
-                    − {t('adjust.remove')}
-                  </button>
-                </div>
-              </div>
-
-              {/* Quantity */}
-              <div className="space-y-1.5">
-                <Label htmlFor="adj-qty">
-                  {t('adjust.quantityLabel')} ({dialog.item.unit})
-                </Label>
-                <Input
-                  id="adj-qty"
-                  type="number"
-                  min="0.01"
-                  step="any"
-                  placeholder="0"
-                  value={dialog.quantity}
-                  onChange={(e) => setDialog({ ...dialog, quantity: e.target.value, error: null })}
-                  className="tabular-nums"
-                />
-                <p className="text-xs text-muted-foreground">
-                  {t('adjust.currentStock')}: {dialog.item.current_quantity.toLocaleString('en-IN')} {dialog.item.unit}
-                </p>
-              </div>
-
-              {/* Reason */}
-              <div className="space-y-1.5">
-                <Label htmlFor="adj-reason">{t('adjust.reasonLabel')}</Label>
-                <select
-                  id="adj-reason"
-                  value={dialog.reason}
-                  onChange={(e) =>
-                    setDialog({ ...dialog, reason: e.target.value as AdjustmentReason, error: null })
-                  }
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  {reasonOptions.map((r) => (
-                    <option key={r} value={r}>
-                      {t(`adjust.reasons.${r}`)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Low stock warning */}
-              {willBeLowStock && (
-                <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                  {t('adjust.lowStockWarning')}
-                </div>
-              )}
-
-              {/* Error */}
-              {dialog.error && (
-                <p className="text-sm text-destructive">{dialog.error}</p>
-              )}
-            </div>
-          )}
-
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={closeDialog} disabled={isPending}>
-              {t('adjust.cancel')}
-            </Button>
-            <Button onClick={handleSubmit} disabled={isPending}>
-              {isPending ? t('adjust.submitting') : t('adjust.submit')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Adjust dialog */}
+      {adjustDialogOpen && (
+        <AdjustDialog
+          items={items}
+          initialItem={adjustItem}
+          onClose={() => {
+            setAdjustDialogOpen(false)
+            setAdjustItem(null)
+          }}
+          onSuccess={handleAdjustSuccess}
+          t={t}
+        />
+      )}
     </div>
   )
 }

@@ -15,6 +15,7 @@ export const manualAdjustmentSchema = z.object({
     .number()
     .refine((v) => v !== 0, { message: 'change_quantity cannot be zero' }),
   reason: z.enum(ADJUSTMENT_REASONS),
+  notes: z.string().max(500).optional(),
 })
 export type ManualAdjustmentInput = z.infer<typeof manualAdjustmentSchema>
 

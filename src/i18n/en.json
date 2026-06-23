@@ -459,6 +459,7 @@
       "summary": {
         "totalItems": "Total Items",
         "lowStock": "Low Stock",
+        "criticalStock": "Critical",
         "rawMaterials": "Raw Materials",
         "finishedGoods": "Finished Goods"
       },
@@ -472,11 +473,15 @@
         "item": "Item",
         "type": "Type",
         "currentStock": "Current Stock",
+        "minimumStock": "Min Stock",
+        "unit": "Unit",
         "reorderLevel": "Reorder Level",
         "lastRestocked": "Last Restocked",
+        "lastUpdated": "Last Updated",
         "status": "Status",
         "actions": "Actions",
-        "noData": "No inventory items found."
+        "noData": "No inventory items found.",
+        "searchPlaceholder": "Search by product name..."
       },
       "itemTypes": {
         "raw_material": "Raw Material",
@@ -484,7 +489,9 @@
       },
       "status": {
         "lowStock": "Low Stock",
-        "ok": "OK"
+        "ok": "OK",
+        "low": "Low",
+        "critical": "Critical"
       },
       "adjust": {
         "button": "Adjust",
@@ -501,6 +508,9 @@
         "submitting": "Applying...",
         "cancel": "Cancel",
         "error": "Failed to adjust stock. Please try again.",
+        "selectProduct": "Select a product",
+        "notesLabel": "Notes",
+        "notesPlaceholder": "Optional details...",
         "reasons": {
           "vendor_receipt": "Received from vendor",
           "damaged": "Damaged / scrapped",
@@ -508,6 +518,17 @@
           "return": "Customer return",
           "other": "Other"
         }
+      },
+      "movements": {
+        "title": "Stock Movement History",
+        "date": "Date",
+        "change": "Change",
+        "reason": "Reason",
+        "by": "By",
+        "balance": "Balance After",
+        "noData": "No movement history in the last 30 days.",
+        "loading": "Loading history...",
+        "error": "Failed to load history."
       }
     },
     "cashFlow": {
