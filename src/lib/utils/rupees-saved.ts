@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import type { Database } from '@/types/database'
 
-export type DateRange = 'this_month' | 'last_3_months' | 'all_time'
+export type DateRange = 'this_month' | 'last_month' | 'last_3_months' | 'all_time'
 
 // Defaults when no historical baseline is available yet.
 const INDUSTRY_AVG_REJECTION_RATE = 0.12   // 12% rejection rate for Gujarat MSMEs
@@ -66,6 +66,12 @@ function getDateBounds(range: DateRange): { periodStart: Date; periodEnd: Date }
       return {
         periodStart: new Date(now.getFullYear(), now.getMonth(), 1),
         periodEnd: now,
+      }
+    case 'last_month':
+      // Full previous calendar month [1st 00:00 .. last day 23:59:59].
+      return {
+        periodStart: new Date(now.getFullYear(), now.getMonth() - 1, 1),
+        periodEnd: new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999),
       }
     case 'last_3_months': {
       const start = new Date(now)

@@ -79,8 +79,78 @@
     "dashboard": {
       "title": "ડેશબોર્ડ",
       "description": "તમારો વ્યવસાય — ઓર્ડર, ઇન્વૉઇસ, ઉત્પાદન અને રોકડ પ્રવાહ એક નજરમાં.",
-      "sprint": "Sprint 6 માં નિર્માણ થઈ રહ્યું છે",
-      "placeholder": "Sprint 6 પૂર્ણ થયા પછી તમારો વ્યવસાય અવલોકન અહીં દેખાશે."
+      "quickActions": {
+        "newOrder": "નવો ઓર્ડર",
+        "logProduction": "ઉત્પાદન નોંધો",
+        "createInvoice": "ઇન્વૉઇસ બનાવો"
+      },
+      "hero": {
+        "savedThisMonth": "આ મહિને બચાવ્યું",
+        "vsLastMonth": "ગયા મહિના સામે",
+        "breakdown": "વિગત જુઓ",
+        "hideBreakdown": "વિગત છુપાવો",
+        "noSavings": "VyaOps તમારા કેટલા પૈસા બચાવે છે તે જોવા માટે ઓર્ડર અને ઉત્પાદન નોંધવાનું શરૂ કરો.",
+        "quality": "ગુણવત્તા",
+        "qualityDesc": "ઓછો નકારાયેલ માલ",
+        "payments": "ઝડપી ચુકવણી",
+        "paymentsDesc": "ઝડપી વસૂલાત પર બચેલું વ્યાજ",
+        "duplicates": "ડુપ્લિકેટ પકડ્યા",
+        "duplicatesDesc": "બિલિંગ પહેલાં પુનરાવર્તિત ઓર્ડર રોકાયા",
+        "time": "સમય બચાવ્યો",
+        "timeDesc": "કાગળના ચોપડા બદલે WhatsApp"
+      },
+      "metrics": {
+        "ordersThisMonth": "આ મહિનાના ઓર્ડર",
+        "productionYield": "ઉત્પાદન યીલ્ડ",
+        "outstandingReceivables": "બાકી લેણાં",
+        "lowStockAlerts": "ઓછા સ્ટોકની ચેતવણી",
+        "items": "વસ્તુઓને ફરી ઓર્ડર જરૂરી",
+        "noData": "—"
+      },
+      "actions": {
+        "title": "તમારા ધ્યાનની જરૂર છે",
+        "empty": "બધું બરાબર — હમણાં કશું ધ્યાન માગતું નથી.",
+        "overdueInvoices": "મુદત વીતી ગયેલ ઇન્વૉઇસ",
+        "stuckOrders": "ઉત્પાદનમાં અટવાયેલ ઓર્ડર",
+        "lowStock": "ઓછો સ્ટોક — ફરી ઓર્ડર જરૂરી",
+        "sendReminder": "રિમાઇન્ડર મોકલો",
+        "checkStatus": "સ્થિતિ જુઓ",
+        "createPO": "PO બનાવો",
+        "noBatchDays": "{days} દિવસથી કોઈ બેચ નહીં",
+        "remaining": "{qty} {unit} બાકી",
+        "reorderAt": "{level} પર ફરી ઓર્ડર",
+        "unknownCustomer": "અજાણ્યો ગ્રાહક"
+      },
+      "activity": {
+        "title": "તાજેતરની પ્રવૃત્તિ",
+        "empty": "હજી કોઈ પ્રવૃત્તિ નથી.",
+        "verbs": {
+          "create": "બનાવ્યું",
+          "update": "અપડેટ કર્યું",
+          "delete": "કાઢ્યું",
+          "restore": "પુનઃસ્થાપિત કર્યું"
+        },
+        "entity": {
+          "order": "ઓર્ડર",
+          "invoice": "ઇન્વૉઇસ",
+          "customer": "ગ્રાહક",
+          "vendor": "વિક્રેતા",
+          "vendorOrder": "ખરીદ ઓર્ડર",
+          "product": "ઉત્પાદન",
+          "batch": "બેચ",
+          "inventory": "ઇન્વેન્ટરી આઇટમ",
+          "user": "ટીમ સભ્ય",
+          "organization": "સંસ્થા",
+          "record": "રેકોર્ડ"
+        },
+        "sources": {
+          "whatsapp": "WhatsApp",
+          "system": "સિસ્ટમ",
+          "api": "API",
+          "scheduled": "ઓટોમેશન",
+          "platformAdmin": "VyaOps"
+        }
+      }
     },
     "orders": {
       "title": "ઓર્ડર",

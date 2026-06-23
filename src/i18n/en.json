@@ -79,8 +79,78 @@
     "dashboard": {
       "title": "Dashboard",
       "description": "Overview of your business — orders, invoices, production, and cash flow at a glance.",
-      "sprint": "Building in Sprint 6",
-      "placeholder": "Your business overview will appear here once Sprint 6 is complete."
+      "quickActions": {
+        "newOrder": "New Order",
+        "logProduction": "Log Production",
+        "createInvoice": "Create Invoice"
+      },
+      "hero": {
+        "savedThisMonth": "Saved This Month",
+        "vsLastMonth": "vs last month",
+        "breakdown": "See breakdown",
+        "hideBreakdown": "Hide breakdown",
+        "noSavings": "Start logging orders and production to see how much VyaOps saves you.",
+        "quality": "Quality",
+        "qualityDesc": "Fewer rejected pieces",
+        "payments": "Faster Payments",
+        "paymentsDesc": "Interest saved on quicker collection",
+        "duplicates": "Duplicates Caught",
+        "duplicatesDesc": "Repeat orders blocked before billing",
+        "time": "Time Saved",
+        "timeDesc": "WhatsApp instead of paper ledgers"
+      },
+      "metrics": {
+        "ordersThisMonth": "Orders This Month",
+        "productionYield": "Production Yield",
+        "outstandingReceivables": "Outstanding Receivables",
+        "lowStockAlerts": "Low Stock Alerts",
+        "items": "items need reorder",
+        "noData": "—"
+      },
+      "actions": {
+        "title": "Needs Your Attention",
+        "empty": "All clear — nothing needs attention right now.",
+        "overdueInvoices": "Overdue Invoices",
+        "stuckOrders": "Orders Stuck in Production",
+        "lowStock": "Low Stock — Reorder Needed",
+        "sendReminder": "Send Reminder",
+        "checkStatus": "Check Status",
+        "createPO": "Create PO",
+        "noBatchDays": "No batch in {days}d",
+        "remaining": "{qty} {unit} left",
+        "reorderAt": "Reorder at {level}",
+        "unknownCustomer": "Unknown customer"
+      },
+      "activity": {
+        "title": "Recent Activity",
+        "empty": "No activity yet.",
+        "verbs": {
+          "create": "created",
+          "update": "updated",
+          "delete": "deleted",
+          "restore": "restored"
+        },
+        "entity": {
+          "order": "Order",
+          "invoice": "Invoice",
+          "customer": "Customer",
+          "vendor": "Vendor",
+          "vendorOrder": "Purchase Order",
+          "product": "Product",
+          "batch": "Batch",
+          "inventory": "Inventory item",
+          "user": "Team member",
+          "organization": "Organisation",
+          "record": "record"
+        },
+        "sources": {
+          "whatsapp": "WhatsApp",
+          "system": "System",
+          "api": "API",
+          "scheduled": "Automation",
+          "platformAdmin": "VyaOps"
+        }
+      }
     },
     "orders": {
       "title": "Orders",

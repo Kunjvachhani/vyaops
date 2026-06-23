@@ -3,7 +3,7 @@ import { getCurrentUser } from '@/lib/supabase/server'
 import { captureWithContext } from '@/lib/utils/sentry'
 import { calculateRupeesSaved, type DateRange } from '@/lib/utils/rupees-saved'
 
-const VALID_DATE_RANGES = new Set<DateRange>(['this_month', 'last_3_months', 'all_time'])
+const VALID_DATE_RANGES = new Set<DateRange>(['this_month', 'last_month', 'last_3_months', 'all_time'])
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser()
