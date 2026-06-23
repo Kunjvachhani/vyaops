@@ -318,7 +318,81 @@
       "title": "Vendors",
       "description": "Manage suppliers, purchase orders, and vendor payments.",
       "sprint": "Building in Sprint 5",
-      "placeholder": "Vendor management will be available here once Sprint 5 is complete."
+      "placeholder": "Vendor management will be available here once Sprint 5 is complete.",
+      "addVendor": "Add Vendor",
+      "searchPlaceholder": "Search vendors...",
+      "columns": {
+        "name": "Name",
+        "address": "Address",
+        "materials": "Materials",
+        "paymentTerms": "Payment Terms",
+        "rating": "Rating"
+      },
+      "form": {
+        "addTitle": "Add Vendor",
+        "name": "Contact Name",
+        "companyName": "Company Name",
+        "phone": "Phone",
+        "email": "Email",
+        "gstin": "GSTIN",
+        "address": "Address",
+        "materials": "Materials Supplied",
+        "materialsHint": "e.g. Sand, Coke, Pig Iron",
+        "paymentTerms": "Payment Terms (days)",
+        "rating": "Rating (0–5)",
+        "notes": "Notes",
+        "adding": "Adding...",
+        "saving": "Saving..."
+      },
+      "detail": {
+        "purchaseOrders": "Purchase Orders",
+        "noPOs": "No purchase orders yet.",
+        "createPO": "Create PO",
+        "totalSpend": "Total Spend",
+        "outstanding": "Outstanding",
+        "days": "days"
+      },
+      "po": {
+        "columns": {
+          "poNumber": "PO #",
+          "material": "Material",
+          "qty": "Qty",
+          "amount": "Amount",
+          "status": "Status",
+          "expectedDate": "Expected"
+        },
+        "form": {
+          "title": "Create Purchase Order",
+          "material": "Material Name",
+          "quantity": "Quantity",
+          "unit": "Unit",
+          "unitPrice": "Unit Price (₹)",
+          "expectedDate": "Expected Delivery Date",
+          "notes": "Notes",
+          "creating": "Creating...",
+          "create": "Create PO"
+        },
+        "detail": {
+          "poNumber": "PO Number",
+          "poDate": "PO Date",
+          "expectedDate": "Expected Date",
+          "material": "Material",
+          "quantity": "Quantity",
+          "unit": "Unit",
+          "unitPrice": "Unit Price",
+          "totalAmount": "Total Amount",
+          "status": "Status",
+          "qualityStatus": "Quality Status",
+          "receivedQty": "Received Quantity",
+          "receivedDate": "Received Date",
+          "notes": "Notes",
+          "markReceived": "Mark Received",
+          "downloadPDF": "Download PDF",
+          "markTitle": "Mark as Received",
+          "confirm": "Confirm",
+          "markingReceived": "Saving..."
+        }
+      }
     },
     "production": {
       "title": "Production",
