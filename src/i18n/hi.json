@@ -412,15 +412,105 @@
     },
     "quality": {
       "title": "गुणवत्ता",
-      "description": "दोष दर, निरीक्षण परिणाम और गुणवत्ता रुझान मॉनिटर करें।",
-      "sprint": "Sprint 5 में बन रहा है",
-      "placeholder": "Sprint 5 पूरा होने के बाद गुणवत्ता डैशबोर्ड यहाँ उपलब्ध होगा।"
+      "description": "दोष दर, अस्वीकृति ट्रेंड और गुणवत्ता सुधार से बचत मॉनिटर करें।",
+      "metrics": {
+        "rejectionRate": "अस्वीकृति दर",
+        "vsLastMonth": "पिछले माह से",
+        "rsSaved": "₹ बचत",
+        "savingsDesc": "पिछले माह से",
+        "totalProduced": "उत्पादित नग",
+        "thisMonth": "इस माह",
+        "bestProduct": "सर्वश्रेष्ठ उत्पाद",
+        "lowestRejection": "अस्वीकृति दर"
+      },
+      "trend": {
+        "title": "अस्वीकृति दर — पिछले 30 दिन",
+        "rateLabel": "अस्वीकृति दर %",
+        "targetLabel": "लक्ष्य (5%)"
+      },
+      "pareto": {
+        "title": "मुख्य अस्वीकृति कारण",
+        "countLabel": "अस्वीकृत नग",
+        "noData": "अभी तक कोई दोष डेटा दर्ज नहीं।"
+      },
+      "productTable": {
+        "title": "उत्पाद अनुसार अस्वीकृति दर",
+        "product": "उत्पाद",
+        "produced": "उत्पादित",
+        "rejected": "अस्वीकृत",
+        "rate": "दर %",
+        "noData": "इस माह कोई उत्पादन डेटा नहीं।",
+        "highRisk": "5% से अधिक"
+      },
+      "savings": {
+        "title": "₹ बचत की गणना कैसे होती है",
+        "improved": "अस्वीकृति दर इस माह {prev}% से {curr}% हो गई।",
+        "formula": "बचत = ({prev}% − {curr}%) × {produced} नग × औसत इकाई मूल्य",
+        "amount": "≈ {amount} की बचत इस माह",
+        "noImprovement": "यहाँ बचत देखने के लिए गुणवत्ता बनाए रखें या सुधारें।",
+        "noData": "बचत गणना के लिए अभी पर्याप्त डेटा नहीं।"
+      },
+      "noData": "पिछले 30 दिनों में कोई उत्पादन डेटा नहीं।"
     },
     "inventory": {
       "title": "इन्वेंटरी",
       "description": "कच्चा माल, तैयार माल और स्टॉक स्तर रीयल टाइम में ट्रैक करें।",
       "sprint": "Sprint 5 में बन रहा है",
-      "placeholder": "Sprint 5 पूरा होने के बाद इन्वेंटरी ट्रैकिंग यहाँ उपलब्ध होगी।"
+      "placeholder": "Sprint 5 पूरा होने के बाद इन्वेंटरी ट्रैकिंग यहाँ उपलब्ध होगी।",
+      "loadError": "इन्वेंटरी लोड नहीं हो सकी। कृपया पृष्ठ रिफ्रेश करें।",
+      "summary": {
+        "totalItems": "कुल आइटम",
+        "lowStock": "कम स्टॉक",
+        "rawMaterials": "कच्चा माल",
+        "finishedGoods": "तैयार माल"
+      },
+      "filters": {
+        "all": "सभी आइटम",
+        "raw_material": "कच्चा माल",
+        "finished_good": "तैयार माल",
+        "low_stock": "कम स्टॉक"
+      },
+      "table": {
+        "item": "आइटम",
+        "type": "प्रकार",
+        "currentStock": "वर्तमान स्टॉक",
+        "reorderLevel": "रीऑर्डर स्तर",
+        "lastRestocked": "अंतिम भरावट",
+        "status": "स्थिति",
+        "actions": "कार्रवाई",
+        "noData": "कोई इन्वेंटरी आइटम नहीं मिला।"
+      },
+      "itemTypes": {
+        "raw_material": "कच्चा माल",
+        "finished_good": "तैयार माल"
+      },
+      "status": {
+        "lowStock": "कम स्टॉक",
+        "ok": "ठीक"
+      },
+      "adjust": {
+        "button": "एडजस्ट",
+        "title": "स्टॉक एडजस्ट करें",
+        "directionLabel": "एडजस्टमेंट प्रकार",
+        "add": "स्टॉक जोड़ें",
+        "remove": "स्टॉक घटाएं",
+        "quantityLabel": "मात्रा",
+        "currentStock": "वर्तमान स्टॉक",
+        "reasonLabel": "कारण",
+        "invalidQty": "शून्य से अधिक मात्रा दर्ज करें।",
+        "lowStockWarning": "इस एडजस्टमेंट के बाद, स्टॉक रीऑर्डर स्तर से नीचे जाएगा।",
+        "submit": "एडजस्टमेंट लागू करें",
+        "submitting": "लागू हो रहा है...",
+        "cancel": "रद्द करें",
+        "error": "स्टॉक एडजस्ट नहीं हो सका। फिर से प्रयास करें।",
+        "reasons": {
+          "vendor_receipt": "विक्रेता से प्राप्त",
+          "damaged": "क्षतिग्रस्त / रद्दी",
+          "physical_count": "भौतिक गणना सुधार",
+          "return": "ग्राहक वापसी",
+          "other": "अन्य"
+        }
+      }
     },
     "cashFlow": {
       "title": "नकद प्रवाह",

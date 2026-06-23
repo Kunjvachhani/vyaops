@@ -410,15 +410,105 @@
     },
     "quality": {
       "title": "Quality",
-      "description": "Monitor defect rates, inspection results, and quality trends.",
-      "sprint": "Building in Sprint 5",
-      "placeholder": "Quality dashboards will be available here once Sprint 5 is complete."
+      "description": "Monitor defect rates, rejection trends, and savings from quality improvements.",
+      "metrics": {
+        "rejectionRate": "Rejection Rate",
+        "vsLastMonth": "vs last month",
+        "rsSaved": "₹ Saved",
+        "savingsDesc": "vs last month",
+        "totalProduced": "Pieces Produced",
+        "thisMonth": "This month",
+        "bestProduct": "Best Product",
+        "lowestRejection": "rejection rate"
+      },
+      "trend": {
+        "title": "Rejection Rate — Last 30 Days",
+        "rateLabel": "Rejection Rate %",
+        "targetLabel": "Target (5%)"
+      },
+      "pareto": {
+        "title": "Top Rejection Reasons",
+        "countLabel": "Rejected Pieces",
+        "noData": "No defect data recorded yet."
+      },
+      "productTable": {
+        "title": "Rejection Rate by Product",
+        "product": "Product",
+        "produced": "Produced",
+        "rejected": "Rejected",
+        "rate": "Rate %",
+        "noData": "No production data this month.",
+        "highRisk": "Above 5%"
+      },
+      "savings": {
+        "title": "How ₹ Saved is Calculated",
+        "improved": "Rejection rate improved from {prev}% to {curr}% this month.",
+        "formula": "Savings = ({prev}% − {curr}%) × {produced} pcs × avg unit value",
+        "amount": "≈ {amount} saved this month",
+        "noImprovement": "Maintain or improve your quality to see savings here.",
+        "noData": "Not enough data to calculate savings yet."
+      },
+      "noData": "No production data in the last 30 days."
     },
     "inventory": {
       "title": "Inventory",
       "description": "Track raw materials, finished goods, and stock levels in real time.",
       "sprint": "Building in Sprint 5",
-      "placeholder": "Inventory tracking will be available here once Sprint 5 is complete."
+      "placeholder": "Inventory tracking will be available here once Sprint 5 is complete.",
+      "loadError": "Failed to load inventory. Please refresh.",
+      "summary": {
+        "totalItems": "Total Items",
+        "lowStock": "Low Stock",
+        "rawMaterials": "Raw Materials",
+        "finishedGoods": "Finished Goods"
+      },
+      "filters": {
+        "all": "All Items",
+        "raw_material": "Raw Materials",
+        "finished_good": "Finished Goods",
+        "low_stock": "Low Stock"
+      },
+      "table": {
+        "item": "Item",
+        "type": "Type",
+        "currentStock": "Current Stock",
+        "reorderLevel": "Reorder Level",
+        "lastRestocked": "Last Restocked",
+        "status": "Status",
+        "actions": "Actions",
+        "noData": "No inventory items found."
+      },
+      "itemTypes": {
+        "raw_material": "Raw Material",
+        "finished_good": "Finished Good"
+      },
+      "status": {
+        "lowStock": "Low Stock",
+        "ok": "OK"
+      },
+      "adjust": {
+        "button": "Adjust",
+        "title": "Adjust Stock",
+        "directionLabel": "Adjustment Type",
+        "add": "Add Stock",
+        "remove": "Remove Stock",
+        "quantityLabel": "Quantity",
+        "currentStock": "Current stock",
+        "reasonLabel": "Reason",
+        "invalidQty": "Enter a quantity greater than zero.",
+        "lowStockWarning": "After this adjustment, stock will fall below the reorder level.",
+        "submit": "Apply Adjustment",
+        "submitting": "Applying...",
+        "cancel": "Cancel",
+        "error": "Failed to adjust stock. Please try again.",
+        "reasons": {
+          "vendor_receipt": "Received from vendor",
+          "damaged": "Damaged / scrapped",
+          "physical_count": "Physical count correction",
+          "return": "Customer return",
+          "other": "Other"
+        }
+      }
     },
     "cashFlow": {
       "title": "Cash Flow",
