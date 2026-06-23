@@ -40,6 +40,8 @@ holds only `APP_URL` + `INTERNAL_API_KEY` (workflow env), no Meta/DeepSeek keys.
 |----------|----------|--------|--------|
 | daily-order-summary | 8:00 AM IST | Query yesterday orders + today production + overdue → send template | ✅ Built |
 | payment-reminder | 10:00 AM IST | Query overdue invoices → send tiered reminders | ✅ Built |
+| morning-production-plan | 7:30 AM IST | Query in-production orders → send plan to owner | ✅ Built (tier_1+) |
+| evening-production-summary | 6:30 PM IST | Query today batches → totals + yield % + high-rejection alert | ✅ Built (tier_2+) |
 | daily-evening-summary | 7:00 PM IST | Query production + inventory → send template | 🔲 Planned (tier_2+) |
 | low-stock-alert | 7:00 PM IST | Check inventory vs reorder level → alert | 🔲 Planned (tier_2+) |
 | compliance-reminder | 8:00 AM IST | Check upcoming deadlines → notify | 🔲 Planned (tier_3) |

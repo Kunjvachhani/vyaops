@@ -1,0 +1,298 @@
+{
+  "name": "VyaOps — Evening Production Summary",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodes": [
+    {
+      "id": "node-01-cron",
+      "name": "Daily 6:30PM IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 30 18 * * *"
+            }
+          ]
+        }
+      },
+      "notes": "Runs daily at 18:30. Workflow timezone is Asia/Kolkata (see Settings), so this fires at 18:30 IST."
+    },
+
+    {
+      "id": "node-02-fetch-summaries",
+      "name": "Fetch Evening Summaries",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [480, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.APP_URL }}/api/production/evening-summary",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "options": {
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 2000 },
+          "timeout": 30000
+        }
+      },
+      "notes": "GET /api/production/evening-summary (internal auth). Returns { summaries: [...], meta } for tier_2+ orgs. Each summary contains: organization_id, owner_phone, language_preference, date_label, total_produced, total_rejected, yield_pct, rejection_rate_pct, high_rejection (boolean), has_data. Only orgs with production batches logged today are included."
+    },
+
+    {
+      "id": "node-03-split",
+      "name": "Split Into Summaries",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [720, 300],
+      "parameters": {
+        "fieldToSplitOut": "summaries",
+        "options": {}
+      },
+      "notes": "Fans the summaries array to one item per org. Referenced by downstream nodes for item-stable lineage."
+    },
+
+    {
+      "id": "node-04-has-data-guard",
+      "name": "Has Data",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [960, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c0",
+              "leftValue": "={{ $json.has_data }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            },
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.owner_phone }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            },
+            {
+              "id": "c2",
+              "leftValue": "={{ $json.language_preference }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Defense-in-depth guard: has_data true, owner phone present, language set. The endpoint already enforces all three; this catches any contract drift."
+    },
+
+    {
+      "id": "node-05-check-high-rejection",
+      "name": "High Rejection?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1200, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c0",
+              "leftValue": "={{ $json.high_rejection }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Branches on high_rejection flag (rejection_rate_pct > 10%). True → alert template; False → normal template. Two separate Meta templates keep the copy clean and avoid empty variables."
+    },
+
+    {
+      "id": "node-06-send-alert",
+      "name": "Send Summary with Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1440, 180],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/whatsapp/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.owner_phone, type: 'template', orgId: $json.organization_id, template: { name: $json.language_preference === 'gu' ? 'evening_production_summary_alert_gujarati' : 'evening_production_summary_alert', language: { code: $json.language_preference === 'gu' ? 'gu' : 'en' }, components: [{ type: 'body', parameters: [{ type: 'text', text: String($json.date_label) }, { type: 'text', text: String($json.total_produced) }, { type: 'text', text: String($json.total_rejected) }, { type: 'text', text: String($json.yield_pct) }] }] } }) }}",
+        "options": {
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 2000 },
+          "timeout": 30000
+        }
+      },
+      "notes": "Sends evening_production_summary_alert template when rejection rate > 10%. Body copy includes '⚠️ High rejection rate — check quality.' baked in. Variables: {{1}}=date_label, {{2}}=total_produced, {{3}}=total_rejected, {{4}}=yield_pct."
+    },
+
+    {
+      "id": "node-07-send-normal",
+      "name": "Send Summary Normal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1440, 420],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/whatsapp/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.owner_phone, type: 'template', orgId: $json.organization_id, template: { name: $json.language_preference === 'gu' ? 'evening_production_summary_gujarati' : 'evening_production_summary', language: { code: $json.language_preference === 'gu' ? 'gu' : 'en' }, components: [{ type: 'body', parameters: [{ type: 'text', text: String($json.date_label) }, { type: 'text', text: String($json.total_produced) }, { type: 'text', text: String($json.total_rejected) }, { type: 'text', text: String($json.yield_pct) }] }] } }) }}",
+        "options": {
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 2000 },
+          "timeout": 30000
+        }
+      },
+      "notes": "Sends evening_production_summary template when rejection rate ≤ 10%. Variables: {{1}}=date_label, {{2}}=total_produced, {{3}}=total_rejected, {{4}}=yield_pct."
+    },
+
+    {
+      "id": "node-08-merge",
+      "name": "Merge Send Branches",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1680, 300],
+      "parameters": {
+        "mode": "append",
+        "options": {}
+      },
+      "notes": "Reunites the alert and normal send branches before logging analytics. Both paths send one WhatsApp per org then flow here."
+    },
+
+    {
+      "id": "node-09-log",
+      "name": "Log Summary Sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1920, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/analytics/log-intent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ orgId: $('Split Into Summaries').item.json.organization_id, chatPhone: $('Split Into Summaries').item.json.owner_phone, messageType: 'evening_production_summary_sent', timestamp: new Date().toISOString() }) }}",
+        "options": {
+          "retry": { "enabled": true, "maxTries": 2, "waitBetweenTries": 1000 }
+        }
+      },
+      "notes": "POST /api/analytics/log-intent → PostHog. Reads org/phone from Split node (last 1:1 node before the IF branch) since Send node responses strip them. Privacy-safe: orgId + masked phone + event type only."
+    },
+
+    {
+      "id": "node-10-error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [240, 620],
+      "parameters": {},
+      "notes": "Set this workflow as its own Error Workflow in Settings > Error Workflow."
+    },
+
+    {
+      "id": "node-11-log-error",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [480, 620],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/errors/log",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source: 'n8n_evening_production_summary', error: $json.error?.message, workflow: $json.workflow?.name, node: $json.execution?.lastNodeExecuted, executionId: $json.execution?.id, timestamp: new Date().toISOString() }) }}",
+        "options": {}
+      },
+      "notes": "Logs failures to Sentry via /api/errors/log. Never messages a customer chat."
+    }
+  ],
+
+  "connections": {
+    "Daily 6:30PM IST": {
+      "main": [[{ "node": "Fetch Evening Summaries", "type": "main", "index": 0 }]]
+    },
+    "Fetch Evening Summaries": {
+      "main": [[{ "node": "Split Into Summaries", "type": "main", "index": 0 }]]
+    },
+    "Split Into Summaries": {
+      "main": [[{ "node": "Has Data", "type": "main", "index": 0 }]]
+    },
+    "Has Data": {
+      "main": [[{ "node": "High Rejection?", "type": "main", "index": 0 }]]
+    },
+    "High Rejection?": {
+      "main": [
+        [{ "node": "Send Summary with Alert", "type": "main", "index": 0 }],
+        [{ "node": "Send Summary Normal", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send Summary with Alert": {
+      "main": [[{ "node": "Merge Send Branches", "type": "main", "index": 0 }]]
+    },
+    "Send Summary Normal": {
+      "main": [[{ "node": "Merge Send Branches", "type": "main", "index": 1 }]]
+    },
+    "Merge Send Branches": {
+      "main": [[{ "node": "Log Summary Sent", "type": "main", "index": 0 }]]
+    },
+    "Error Trigger": {
+      "main": [[{ "node": "Log Error", "type": "main", "index": 0 }]]
+    }
+  },
+
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "id": "vyaops-evening-production-summary",
+  "tags": [
+    { "id": "vyaops", "name": "vyaops" },
+    { "id": "production", "name": "production" },
+    { "id": "cron", "name": "cron" }
+  ],
+  "pinData": {}
+}

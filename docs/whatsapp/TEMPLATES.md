@@ -57,7 +57,91 @@ receiving these messages — this is a UX choice, not a Meta requirement.
 
    તમારો દિવસ શુભ રહે!
    ```
-8. daily_evening_summary (₹0.145/message): "📊 Today's wrap: {summary}..."
+8. morning_production_plan (₹0.145/message): 3 body variables, in order:
+   {{1}} = formatted date (DD MMM YYYY)   e.g. "23 Jun 2026"
+   {{2}} = order count in production       e.g. "3"
+   {{3}} = orders list (multiline)         e.g. "• Valve Body — 100 pcs (ORD-2606-001)\n• Flange — 50 pcs"
+
+   Gujarati variant name: `morning_production_plan_gujarati`
+
+   English body (paste-ready):
+   ```
+   🏭 Production Plan — {{1}}
+
+   {{2}} orders in production today:
+   {{3}}
+
+   Have a productive shift!
+   ```
+
+   Gujarati body — morning_production_plan_gujarati (paste-ready):
+   ```
+   🏭 {{1}} ની ઉત્પાદન યોજના
+
+   આજે {{2}} ઓર્ડર ઉત્પાદનમાં છે:
+   {{3}}
+
+   ઉત્પાદક પાળી રહો!
+   ```
+
+9. evening_production_summary (₹0.145/message): 4 body variables, in order:
+   {{1}} = formatted date (DD MMM YYYY)   e.g. "23 Jun 2026"
+   {{2}} = total pieces produced           e.g. "320"
+   {{3}} = total pieces rejected           e.g. "12"
+   {{4}} = yield percentage                e.g. "96.4%"
+
+   Sent when rejection rate ≤ 10%. For rejection rate > 10% use
+   `evening_production_summary_alert` / `evening_production_summary_alert_gujarati`
+   (same 4 variables, alert copy baked into the body).
+
+   Gujarati variants: `evening_production_summary_gujarati` /
+   `evening_production_summary_alert_gujarati`
+
+   English body — evening_production_summary (paste-ready):
+   ```
+   📊 Production Summary — {{1}}
+
+   ✅ Produced: {{2}} pieces
+   ❌ Rejected: {{3}} pieces
+   📈 Yield: {{4}}
+
+   Good work today!
+   ```
+
+   English body — evening_production_summary_alert (paste-ready):
+   ```
+   📊 Production Summary — {{1}}
+
+   ✅ Produced: {{2}} pieces
+   ❌ Rejected: {{3}} pieces
+   📈 Yield: {{4}}
+
+   ⚠️ High rejection rate — check quality.
+   ```
+
+   Gujarati body — evening_production_summary_gujarati (paste-ready):
+   ```
+   📊 ઉત્પાદન સારાંશ — {{1}}
+
+   ✅ ઉત્પાદિત: {{2}} નંગ
+   ❌ નકાર: {{3}} નંગ
+   📈 યીલ્ડ: {{4}}
+
+   આજે સારું કામ!
+   ```
+
+   Gujarati body — evening_production_summary_alert_gujarati (paste-ready):
+   ```
+   📊 ઉત્પાદન સારાંશ — {{1}}
+
+   ✅ ઉત્પાદિત: {{2}} નંગ
+   ❌ નકાર: {{3}} નંગ
+   📈 યીલ્ડ: {{4}}
+
+   ⚠️ ઊંચો નકાર દર — ગુણવત્તા તપાસો.
+   ```
+
+10. daily_evening_summary (₹0.145/message): "📊 Today's wrap: {summary}..."
 9. payment_reminder (₹0.145/message): "⏰ Reminder: Invoice #{invoice_number} for {customer}, ₹{amount}, {days} days overdue."
 10. compliance_reminder (₹0.145/message): "📋 Upcoming: {task_name} due on {date}. Status: {status}."
 

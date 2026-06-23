@@ -1,0 +1,222 @@
+{
+  "name": "VyaOps — Morning Production Plan",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodes": [
+    {
+      "id": "node-01-cron",
+      "name": "Daily 7:30AM IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 30 7 * * *"
+            }
+          ]
+        }
+      },
+      "notes": "Runs daily at 07:30. Workflow timezone is Asia/Kolkata (see Settings), so this fires at 07:30 IST."
+    },
+
+    {
+      "id": "node-02-fetch-plans",
+      "name": "Fetch Morning Plans",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [480, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.APP_URL }}/api/production/morning-plan",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "options": {
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 2000 },
+          "timeout": 30000
+        }
+      },
+      "notes": "GET /api/production/morning-plan (internal auth). Returns { summaries: [...], meta } across ALL orgs. Each summary contains: organization_id, owner_phone, language_preference, date_label, order_count, orders_formatted, has_data. Only orgs with whatsapp_proactive_enabled=true, an owner phone, and at least one in-production order are included."
+    },
+
+    {
+      "id": "node-03-split",
+      "name": "Split Into Plans",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [720, 300],
+      "parameters": {
+        "fieldToSplitOut": "summaries",
+        "options": {}
+      },
+      "notes": "Fans the summaries array to one item per org. Downstream nodes reference this node for item-stable lineage when the Send node strips org fields."
+    },
+
+    {
+      "id": "node-04-has-data-guard",
+      "name": "Has Data",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [960, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c0",
+              "leftValue": "={{ $json.has_data }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            },
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.owner_phone }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            },
+            {
+              "id": "c2",
+              "leftValue": "={{ $json.language_preference }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Defense-in-depth guard: has_data true, owner phone present, language set. The endpoint already enforces all three; this catches any contract drift."
+    },
+
+    {
+      "id": "node-05-send",
+      "name": "Send Production Plan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1200, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/whatsapp/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.owner_phone, type: 'template', orgId: $json.organization_id, template: { name: $json.language_preference === 'gu' ? 'morning_production_plan_gujarati' : 'morning_production_plan', language: { code: $json.language_preference === 'gu' ? 'gu' : 'en' }, components: [{ type: 'body', parameters: [{ type: 'text', text: String($json.date_label) }, { type: 'text', text: String($json.order_count) }, { type: 'text', text: String($json.orders_formatted) }] }] } }) }}",
+        "options": {
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 2000 },
+          "timeout": 30000
+        }
+      },
+      "notes": "POST /api/whatsapp/send (internal auth) → Meta Cloud API. Sends morning_production_plan template (Utility, 3 body variables) to the org owner's WhatsApp — never a customer chat (Rule A). Variables: {{1}}=date_label, {{2}}=order_count, {{3}}=orders_formatted (multiline list, up to 5 orders). Gujarati variant when language_preference === 'gu'."
+    },
+
+    {
+      "id": "node-06-log",
+      "name": "Log Plan Sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1440, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/analytics/log-intent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ orgId: $('Split Into Plans').item.json.organization_id, chatPhone: $('Split Into Plans').item.json.owner_phone, messageType: 'morning_production_plan_sent', timestamp: new Date().toISOString() }) }}",
+        "options": {
+          "retry": { "enabled": true, "maxTries": 2, "waitBetweenTries": 1000 }
+        }
+      },
+      "notes": "POST /api/analytics/log-intent (internal auth) → PostHog. Privacy-safe: orgId + masked phone + event type only. Reads org/phone from Split node (last 1:1 node) since Send response strips them."
+    },
+
+    {
+      "id": "node-07-error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [240, 620],
+      "parameters": {},
+      "notes": "Set this workflow as its own Error Workflow in Settings > Error Workflow."
+    },
+
+    {
+      "id": "node-08-log-error",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [480, 620],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/errors/log",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source: 'n8n_morning_production_plan', error: $json.error?.message, workflow: $json.workflow?.name, node: $json.execution?.lastNodeExecuted, executionId: $json.execution?.id, timestamp: new Date().toISOString() }) }}",
+        "options": {}
+      },
+      "notes": "Logs failures to Sentry via /api/errors/log. Never messages a customer chat."
+    }
+  ],
+
+  "connections": {
+    "Daily 7:30AM IST": {
+      "main": [[{ "node": "Fetch Morning Plans", "type": "main", "index": 0 }]]
+    },
+    "Fetch Morning Plans": {
+      "main": [[{ "node": "Split Into Plans", "type": "main", "index": 0 }]]
+    },
+    "Split Into Plans": {
+      "main": [[{ "node": "Has Data", "type": "main", "index": 0 }]]
+    },
+    "Has Data": {
+      "main": [[{ "node": "Send Production Plan", "type": "main", "index": 0 }]]
+    },
+    "Send Production Plan": {
+      "main": [[{ "node": "Log Plan Sent", "type": "main", "index": 0 }]]
+    },
+    "Error Trigger": {
+      "main": [[{ "node": "Log Error", "type": "main", "index": 0 }]]
+    }
+  },
+
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "id": "vyaops-morning-production-plan",
+  "tags": [
+    { "id": "vyaops", "name": "vyaops" },
+    { "id": "production", "name": "production" },
+    { "id": "cron", "name": "cron" }
+  ],
+  "pinData": {}
+}
