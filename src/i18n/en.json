@@ -609,7 +609,74 @@
       "title": "Cash Flow",
       "description": "Monitor receivables, payables, and your net cash position.",
       "sprint": "Building in Sprint 6",
-      "placeholder": "Cash flow analysis will be available here once Sprint 6 is complete."
+      "placeholder": "Cash flow analysis will be available here once Sprint 6 is complete.",
+      "loading": "Loading cash flow data...",
+      "error": "Failed to load cash flow data.",
+      "tabs": {
+        "receivables": "Receivables",
+        "payables": "Payables",
+        "forecast": "30-Day Forecast"
+      },
+      "summary": {
+        "totalReceivables": "Total Receivables",
+        "totalPayables": "Total Payables",
+        "netPosition": "Net Position",
+        "largestOutstanding": "Largest Outstanding"
+      },
+      "aging": {
+        "all": "All",
+        "current": "Current",
+        "1_30": "1–30 days",
+        "31_60": "31–60 days",
+        "61_90": "61–90 days",
+        "90plus": "90+ days",
+        "total": "Total",
+        "noData": "No invoices in this bucket."
+      },
+      "table": {
+        "customer": "Customer",
+        "invoiceNo": "Invoice #",
+        "amount": "Amount",
+        "dueDate": "Due Date",
+        "daysOverdue": "Days Overdue",
+        "status": "Status",
+        "action": "Action",
+        "vendor": "Vendor",
+        "poNo": "PO #",
+        "material": "Material",
+        "expectedDate": "Expected Date",
+        "total": "Total",
+        "noPayables": "No pending payables."
+      },
+      "status": {
+        "draft": "Draft",
+        "sent": "Sent",
+        "partially_paid": "Partial",
+        "pending": "Pending",
+        "confirmed": "Confirmed",
+        "partial": "Partial",
+        "current": "Current",
+        "overdue": "Overdue"
+      },
+      "actions": {
+        "sendReminder": "Send Reminder",
+        "sending": "Sending...",
+        "showAll": "Show All"
+      },
+      "forecast": {
+        "title": "30-Day Cash Flow Forecast",
+        "subtitle": "Expected inflows (invoice due dates) vs outflows (PO payment dates)",
+        "inflow": "Expected Inflow",
+        "outflow": "Expected Outflow",
+        "net": "Net",
+        "noData": "No forecast data for the next 30 days.",
+        "tooltipDate": "Date"
+      },
+      "reminder": {
+        "success": "Reminder sent on WhatsApp.",
+        "noPhone": "Customer has no WhatsApp number on file.",
+        "error": "Failed to send reminder. Please try again."
+      }
     },
     "compliance": {
       "title": "Compliance",

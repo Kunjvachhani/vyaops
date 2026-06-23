@@ -537,7 +537,74 @@
       "title": "नकद प्रवाह",
       "description": "प्राप्य, देय और शुद्ध नकद स्थिति मॉनिटर करें।",
       "sprint": "Sprint 6 में बन रहा है",
-      "placeholder": "Sprint 6 पूरा होने के बाद नकद प्रवाह विश्लेषण यहाँ उपलब्ध होगा।"
+      "placeholder": "Sprint 6 पूरा होने के बाद नकद प्रवाह विश्लेषण यहाँ उपलब्ध होगा।",
+      "loading": "नकद प्रवाह डेटा लोड हो रहा है...",
+      "error": "नकद प्रवाह डेटा लोड नहीं हो सका।",
+      "tabs": {
+        "receivables": "प्राप्य",
+        "payables": "देय",
+        "forecast": "30-दिन पूर्वानुमान"
+      },
+      "summary": {
+        "totalReceivables": "कुल प्राप्य",
+        "totalPayables": "कुल देय",
+        "netPosition": "शुद्ध स्थिति",
+        "largestOutstanding": "सबसे बड़ा बकाया"
+      },
+      "aging": {
+        "all": "सभी",
+        "current": "वर्तमान",
+        "1_30": "1–30 दिन",
+        "31_60": "31–60 दिन",
+        "61_90": "61–90 दिन",
+        "90plus": "90+ दिन",
+        "total": "कुल",
+        "noData": "इस बकेट में कोई इनवॉइस नहीं।"
+      },
+      "table": {
+        "customer": "ग्राहक",
+        "invoiceNo": "इनवॉइस #",
+        "amount": "राशि",
+        "dueDate": "नियत तारीख",
+        "daysOverdue": "बकाया दिन",
+        "status": "स्थिति",
+        "action": "कार्य",
+        "vendor": "विक्रेता",
+        "poNo": "PO #",
+        "material": "सामग्री",
+        "expectedDate": "अपेक्षित तारीख",
+        "total": "कुल",
+        "noPayables": "कोई बकाया भुगतान नहीं।"
+      },
+      "status": {
+        "draft": "ड्राफ्ट",
+        "sent": "भेजा",
+        "partially_paid": "आंशिक",
+        "pending": "लंबित",
+        "confirmed": "पुष्टि",
+        "partial": "आंशिक",
+        "current": "वर्तमान",
+        "overdue": "बकाया"
+      },
+      "actions": {
+        "sendReminder": "रिमाइंडर भेजें",
+        "sending": "भेज रहे हैं...",
+        "showAll": "सभी दिखाएं"
+      },
+      "forecast": {
+        "title": "30-दिन नकद प्रवाह पूर्वानुमान",
+        "subtitle": "अपेक्षित आवक (इनवॉइस नियत तारीख) बनाम व्यय (PO भुगतान)",
+        "inflow": "अपेक्षित आवक",
+        "outflow": "अपेक्षित व्यय",
+        "net": "शुद्ध",
+        "noData": "अगले 30 दिनों के लिए कोई पूर्वानुमान डेटा नहीं।",
+        "tooltipDate": "तारीख"
+      },
+      "reminder": {
+        "success": "WhatsApp पर रिमाइंडर भेजा।",
+        "noPhone": "ग्राहक के पास WhatsApp नंबर नहीं है।",
+        "error": "रिमाइंडर भेजने में विफल।"
+      }
     },
     "compliance": {
       "title": "अनुपालन",
