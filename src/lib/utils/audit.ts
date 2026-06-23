@@ -14,6 +14,7 @@ export type AuditEntityType =
   | 'invoice'
   | 'customer'
   | 'vendor'
+  | 'vendor_order'
   | 'product'
   | 'production_batch'
   | 'inventory'
@@ -44,6 +45,7 @@ const TABLE_NAME: Record<AuditEntityType, string> = {
   invoice: 'invoices',
   customer: 'customers',
   vendor: 'vendors',
+  vendor_order: 'vendor_orders',
   product: 'products',
   production_batch: 'production_batches',
   inventory: 'inventory',

@@ -1455,6 +1455,7 @@ export type Database = {
           unit_price_paise: number | null
           updated_at: string
           vendor_id: string
+          version: number
         }
         Insert: {
           created_at?: string
@@ -1476,6 +1477,7 @@ export type Database = {
           unit_price_paise?: number | null
           updated_at?: string
           vendor_id: string
+          version?: number
         }
         Update: {
           created_at?: string
@@ -1497,6 +1499,7 @@ export type Database = {
           unit_price_paise?: number | null
           updated_at?: string
           vendor_id?: string
+          version?: number
         }
         Relationships: [
           {
@@ -1540,6 +1543,7 @@ export type Database = {
           phone: string | null
           rating: number
           updated_at: string
+          version: number
         }
         Insert: {
           address?: string | null
@@ -1558,6 +1562,7 @@ export type Database = {
           phone?: string | null
           rating?: number
           updated_at?: string
+          version?: number
         }
         Update: {
           address?: string | null
@@ -1576,6 +1581,7 @@ export type Database = {
           phone?: string | null
           rating?: number
           updated_at?: string
+          version?: number
         }
         Relationships: [
           {
