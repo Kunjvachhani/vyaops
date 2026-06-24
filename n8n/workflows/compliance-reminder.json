@@ -1,0 +1,230 @@
+{
+  "name": "VyaOps — Compliance Reminder",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodes": [
+    {
+      "id": "node-01-cron",
+      "name": "Daily 9AM IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 0 9 * * *"
+            }
+          ]
+        }
+      },
+      "notes": "Runs daily at 09:00. Workflow timezone is Asia/Kolkata (set in Settings), so this fires at 09:00 IST."
+    },
+
+    {
+      "id": "node-02-fetch-upcoming",
+      "name": "Fetch Upcoming Compliance Tasks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [480, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.APP_URL }}/api/compliance/upcoming",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "options": {
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 2000 },
+          "timeout": 30000
+        }
+      },
+      "notes": "GET /api/compliance/upcoming (internal auth). Returns { tasks: [...], meta } for tier_3 orgs with whatsapp_proactive_enabled=true. Each task has: id, organization_id, task_name, category, due_date, status, is_due_today, is_overdue, owner_phone, language_preference. Tasks where reminder_sent=false OR due today."
+    },
+
+    {
+      "id": "node-03-split",
+      "name": "Split Into Tasks",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [720, 300],
+      "parameters": {
+        "fieldToSplitOut": "tasks",
+        "options": {}
+      },
+      "notes": "Fans the tasks array to one item per task. This is the last 1:1 node; downstream nodes reference it by name for item-stable lineage."
+    },
+
+    {
+      "id": "node-04-has-phone-guard",
+      "name": "Has Owner Phone",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [960, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c0",
+              "leftValue": "={{ $json.owner_phone }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            },
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.task_name }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Defense-in-depth guard: owner phone and task name must be present. The API already enforces this; guard catches contract drift."
+    },
+
+    {
+      "id": "node-05-send-whatsapp",
+      "name": "Send Compliance Reminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1200, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/whatsapp/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.owner_phone, type: 'template', orgId: $json.organization_id, template: { name: $json.language_preference === 'gu' ? 'compliance_reminder_gujarati' : 'compliance_reminder', language: { code: $json.language_preference === 'gu' ? 'gu' : 'en' }, components: [{ type: 'body', parameters: [{ type: 'text', text: String($json.task_name) }, { type: 'text', text: String($json.due_date) }, { type: 'text', text: String($json.status) }] }] } }) }}",
+        "options": {
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 2000 },
+          "timeout": 30000
+        }
+      },
+      "notes": "POST /api/whatsapp/send (internal auth) → Meta Cloud API. Sends compliance_reminder template (Utility, 3 body variables) to the org OWNER — NEVER to a customer chat (Rule A). Variables: {{1}}=task_name, {{2}}=due_date, {{3}}=status. Gujarati variant: compliance_reminder_gujarati. Template body: '📋 Upcoming: {task_name} due on {date}. Status: {status}.'"
+    },
+
+    {
+      "id": "node-06-mark-reminder-sent",
+      "name": "Mark Reminder Sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1440, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/compliance/{{ $('Split Into Tasks').item.json.id }}/reminder",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "options": {
+          "retry": { "enabled": true, "maxTries": 2, "waitBetweenTries": 1000 }
+        }
+      },
+      "notes": "POST /api/compliance/{id}/reminder (internal auth). Marks reminder_sent = true so this task is not reminded again until the due date. Reads task id from Split node (last 1:1, item-stable lineage)."
+    },
+
+    {
+      "id": "node-07-log",
+      "name": "Log Reminder Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1680, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/analytics/log-intent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ orgId: $('Split Into Tasks').item.json.organization_id, chatPhone: $('Split Into Tasks').item.json.owner_phone, messageType: 'compliance_reminder_sent', timestamp: new Date().toISOString() }) }}",
+        "options": {
+          "retry": { "enabled": true, "maxTries": 2, "waitBetweenTries": 1000 }
+        }
+      },
+      "notes": "POST /api/analytics/log-intent → PostHog. Privacy-safe: orgId + event type only. Reads org/phone from Split node (last 1:1, item-stable) since Send response strips them."
+    },
+
+    {
+      "id": "node-08-error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [240, 620],
+      "parameters": {},
+      "notes": "Set this workflow as its own Error Workflow in Settings > Error Workflow."
+    },
+
+    {
+      "id": "node-09-log-error",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [480, 620],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/errors/log",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source: 'n8n_compliance_reminder', error: $json.error?.message, workflow: $json.workflow?.name, node: $json.execution?.lastNodeExecuted, executionId: $json.execution?.id, timestamp: new Date().toISOString() }) }}",
+        "options": {}
+      },
+      "notes": "Logs failures to Sentry via /api/errors/log. Never messages a customer chat."
+    }
+  ],
+
+  "connections": {
+    "Daily 9AM IST": {
+      "main": [[{ "node": "Fetch Upcoming Compliance Tasks", "type": "main", "index": 0 }]]
+    },
+    "Fetch Upcoming Compliance Tasks": {
+      "main": [[{ "node": "Split Into Tasks", "type": "main", "index": 0 }]]
+    },
+    "Split Into Tasks": {
+      "main": [[{ "node": "Has Owner Phone", "type": "main", "index": 0 }]]
+    },
+    "Has Owner Phone": {
+      "main": [[{ "node": "Send Compliance Reminder", "type": "main", "index": 0 }]]
+    },
+    "Send Compliance Reminder": {
+      "main": [[{ "node": "Mark Reminder Sent", "type": "main", "index": 0 }]]
+    },
+    "Mark Reminder Sent": {
+      "main": [[{ "node": "Log Reminder Activity", "type": "main", "index": 0 }]]
+    },
+    "Error Trigger": {
+      "main": [[{ "node": "Log Error", "type": "main", "index": 0 }]]
+    }
+  },
+
+  "settings": {
+    "timezone": "Asia/Kolkata",
+    "errorWorkflow": "compliance-reminder"
+  }
+}
