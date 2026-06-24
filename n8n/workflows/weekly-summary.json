@@ -1,0 +1,222 @@
+{
+  "name": "VyaOps — Weekly Business Summary",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodes": [
+    {
+      "id": "node-01-cron",
+      "name": "Sunday 9AM IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 0 9 * * 0"
+            }
+          ]
+        }
+      },
+      "notes": "Fires every Sunday at 09:00 IST. Workflow timezone is Asia/Kolkata (see Settings). Day-of-week 0 = Sunday in standard cron."
+    },
+
+    {
+      "id": "node-02-fetch-summaries",
+      "name": "Fetch Weekly Summaries",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [480, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.APP_URL }}/api/analytics/weekly-summary",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "options": {
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 2000 },
+          "timeout": 30000
+        }
+      },
+      "notes": "GET /api/analytics/weekly-summary (internal auth, tier_2+ orgs only). Returns { summaries: [...], meta }. Each summary has: organization_id, owner_phone, language_preference, week_range, order_count, order_value_formatted, production_summary, collections_formatted, rupees_saved, top_customer. The endpoint drops orgs with no data or no owner phone."
+    },
+
+    {
+      "id": "node-03-split",
+      "name": "Split Into Summaries",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [720, 300],
+      "parameters": {
+        "fieldToSplitOut": "summaries",
+        "options": {}
+      },
+      "notes": "Fans the summaries array to one item per org. This is the last 1:1 node; downstream nodes reference it by name for item-stable lineage."
+    },
+
+    {
+      "id": "node-04-has-data-guard",
+      "name": "Has Data",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [960, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c0",
+              "leftValue": "={{ $json.has_data }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            },
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.owner_phone }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            },
+            {
+              "id": "c2",
+              "leftValue": "={{ $json.language_preference }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Defense-in-depth guard: has_data true, owner phone present, language set. The API already enforces all three; this catches contract drift."
+    },
+
+    {
+      "id": "node-05-send",
+      "name": "Send Weekly Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1200, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/whatsapp/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.owner_phone, type: 'template', orgId: $json.organization_id, template: { name: $json.language_preference === 'gu' ? 'weekly_business_summary_gujarati' : 'weekly_business_summary', language: { code: $json.language_preference === 'gu' ? 'gu' : 'en' }, components: [{ type: 'body', parameters: [{ type: 'text', text: String($json.week_range) }, { type: 'text', text: String($json.order_count) }, { type: 'text', text: String($json.order_value_formatted) }, { type: 'text', text: String($json.production_summary) }, { type: 'text', text: String($json.collections_formatted) }, { type: 'text', text: String($json.rupees_saved) }, { type: 'text', text: String($json.top_customer) }] }] } }) }}",
+        "options": {
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 2000 },
+          "timeout": 30000
+        }
+      },
+      "notes": "POST /api/whatsapp/send (internal auth) → Meta Cloud API. Sends weekly_business_summary template (Utility, 7 body variables) to the org owner — NEVER to a customer chat (Rule A). Variables: {{1}}=week_range, {{2}}=order_count, {{3}}=order_value_formatted, {{4}}=production_summary, {{5}}=collections_formatted, {{6}}=rupees_saved, {{7}}=top_customer. Gujarati variant: weekly_business_summary_gujarati."
+    },
+
+    {
+      "id": "node-06-log",
+      "name": "Log Summary Sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1440, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/analytics/log-intent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ orgId: $('Split Into Summaries').item.json.organization_id, chatPhone: $('Split Into Summaries').item.json.owner_phone, messageType: 'weekly_business_summary_sent', timestamp: new Date().toISOString() }) }}",
+        "options": {
+          "retry": { "enabled": true, "maxTries": 2, "waitBetweenTries": 1000 }
+        }
+      },
+      "notes": "POST /api/analytics/log-intent → PostHog. Privacy-safe: orgId + event type only. Reads org/phone from Split node (last 1:1 node) since Send response strips them."
+    },
+
+    {
+      "id": "node-07-error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [240, 620],
+      "parameters": {},
+      "notes": "Set this workflow as its own Error Workflow in Settings > Error Workflow."
+    },
+
+    {
+      "id": "node-08-log-error",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [480, 620],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/errors/log",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source: 'n8n_weekly_business_summary', error: $json.error?.message, workflow: $json.workflow?.name, node: $json.execution?.lastNodeExecuted, executionId: $json.execution?.id, timestamp: new Date().toISOString() }) }}",
+        "options": {}
+      },
+      "notes": "Logs failures to Sentry via /api/errors/log. Never messages a customer chat."
+    }
+  ],
+
+  "connections": {
+    "Sunday 9AM IST": {
+      "main": [[{ "node": "Fetch Weekly Summaries", "type": "main", "index": 0 }]]
+    },
+    "Fetch Weekly Summaries": {
+      "main": [[{ "node": "Split Into Summaries", "type": "main", "index": 0 }]]
+    },
+    "Split Into Summaries": {
+      "main": [[{ "node": "Has Data", "type": "main", "index": 0 }]]
+    },
+    "Has Data": {
+      "main": [[{ "node": "Send Weekly Summary", "type": "main", "index": 0 }]]
+    },
+    "Send Weekly Summary": {
+      "main": [[{ "node": "Log Summary Sent", "type": "main", "index": 0 }]]
+    },
+    "Error Trigger": {
+      "main": [[{ "node": "Log Error", "type": "main", "index": 0 }]]
+    }
+  },
+
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "id": "vyaops-weekly-business-summary",
+  "tags": [
+    { "id": "vyaops", "name": "vyaops" },
+    { "id": "analytics", "name": "analytics" },
+    { "id": "cron", "name": "cron" }
+  ],
+  "pinData": {}
+}

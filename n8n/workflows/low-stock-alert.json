@@ -1,0 +1,243 @@
+{
+  "name": "VyaOps — Low Stock Alert",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodes": [
+    {
+      "id": "node-01-cron",
+      "name": "Every 6 Hours IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 0 */6 * * *"
+            }
+          ]
+        }
+      },
+      "notes": "Fires at 00:00, 06:00, 12:00, 18:00 IST. Workflow timezone is Asia/Kolkata (see Settings). The API endpoint deduplicates via audit_log — items alerted in the last 24 hours are suppressed server-side, so running every 6 hours is safe."
+    },
+
+    {
+      "id": "node-02-fetch-alerts",
+      "name": "Fetch Low Stock Alerts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [480, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.APP_URL }}/api/inventory/low-stock-alert",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "options": {
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 2000 },
+          "timeout": 30000
+        }
+      },
+      "notes": "GET /api/inventory/low-stock-alert (internal auth, tier_2+ orgs only). Returns { alerts: [...], meta }. The endpoint handles deduplication (24-hour suppression per item) and writes to audit_log before responding, so no feedback call is needed after sending."
+    },
+
+    {
+      "id": "node-03-has-alerts",
+      "name": "Has Alerts",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [720, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c0",
+              "leftValue": "={{ $json.alerts.length }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Short-circuit: if the API returned an empty alerts array (all items deduped or no low-stock items), skip the split+send steps entirely."
+    },
+
+    {
+      "id": "node-04-split",
+      "name": "Split Into Alerts",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [960, 300],
+      "parameters": {
+        "fieldToSplitOut": "alerts",
+        "options": {}
+      },
+      "notes": "Fans the alerts array to one item per inventory alert. Each item contains: organization_id, owner_phone, language_preference, inventory_id, item_name, current_quantity, unit, days_supply. The Split node is the last 1:1 node; the Send node references it for org/phone lineage."
+    },
+
+    {
+      "id": "node-05-guard",
+      "name": "Has Phone",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [1200, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c0",
+              "leftValue": "={{ $json.owner_phone }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            },
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.item_name }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Defense-in-depth: owner_phone and item_name must be present. The API enforces this; this node catches contract drift."
+    },
+
+    {
+      "id": "node-06-send",
+      "name": "Send Low Stock Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1440, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/whatsapp/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.owner_phone, type: 'template', orgId: $json.organization_id, template: { name: $json.language_preference === 'gu' ? 'inventory_alert_gujaratii' : 'inventory_alert', language: { code: $json.language_preference === 'gu' ? 'gu' : 'en' }, components: [{ type: 'body', parameters: [{ type: 'text', text: String($json.item_name) }, { type: 'text', text: String($json.current_quantity) }, { type: 'text', text: String($json.unit) }, { type: 'text', text: String($json.days_supply) }] }] } }) }}",
+        "options": {
+          "retry": { "enabled": true, "maxTries": 3, "waitBetweenTries": 2000 },
+          "timeout": 30000
+        }
+      },
+      "notes": "POST /api/whatsapp/send (internal auth) → Meta Cloud API. Sends inventory_alert template (Utility) to the org owner — NEVER to a customer chat (Rule A). Template body variables: {{1}}=item_name, {{2}}=current_quantity, {{3}}=unit, {{4}}=days_supply. Gujarati variant: inventory_alert_gujaratii (double trailing 'i' — intentional, matches Meta submission)."
+    },
+
+    {
+      "id": "node-07-log",
+      "name": "Log Alert Sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1680, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/analytics/log-intent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ orgId: $('Split Into Alerts').item.json.organization_id, chatPhone: $('Split Into Alerts').item.json.owner_phone, messageType: 'low_stock_alert_sent', timestamp: new Date().toISOString() }) }}",
+        "options": {
+          "retry": { "enabled": true, "maxTries": 2, "waitBetweenTries": 1000 }
+        }
+      },
+      "notes": "POST /api/analytics/log-intent → PostHog. Privacy-safe: orgId + event type only. Reads org/phone from Split node (last 1:1 node) since Send response strips them."
+    },
+
+    {
+      "id": "node-08-error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [240, 620],
+      "parameters": {},
+      "notes": "Set this workflow as its own Error Workflow in Settings > Error Workflow."
+    },
+
+    {
+      "id": "node-09-log-error",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [480, 620],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_URL }}/api/errors/log",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-internal-api-key", "value": "={{ $env.INTERNAL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source: 'n8n_low_stock_alert', error: $json.error?.message, workflow: $json.workflow?.name, node: $json.execution?.lastNodeExecuted, executionId: $json.execution?.id, timestamp: new Date().toISOString() }) }}",
+        "options": {}
+      },
+      "notes": "Logs failures to Sentry via /api/errors/log. Never messages a customer chat."
+    }
+  ],
+
+  "connections": {
+    "Every 6 Hours IST": {
+      "main": [[{ "node": "Fetch Low Stock Alerts", "type": "main", "index": 0 }]]
+    },
+    "Fetch Low Stock Alerts": {
+      "main": [[{ "node": "Has Alerts", "type": "main", "index": 0 }]]
+    },
+    "Has Alerts": {
+      "main": [[{ "node": "Split Into Alerts", "type": "main", "index": 0 }]]
+    },
+    "Split Into Alerts": {
+      "main": [[{ "node": "Has Phone", "type": "main", "index": 0 }]]
+    },
+    "Has Phone": {
+      "main": [[{ "node": "Send Low Stock Alert", "type": "main", "index": 0 }]]
+    },
+    "Send Low Stock Alert": {
+      "main": [[{ "node": "Log Alert Sent", "type": "main", "index": 0 }]]
+    },
+    "Error Trigger": {
+      "main": [[{ "node": "Log Error", "type": "main", "index": 0 }]]
+    }
+  },
+
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "id": "vyaops-low-stock-alert",
+  "tags": [
+    { "id": "vyaops", "name": "vyaops" },
+    { "id": "inventory", "name": "inventory" },
+    { "id": "cron", "name": "cron" }
+  ],
+  "pinData": {}
+}

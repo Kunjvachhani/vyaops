@@ -10,10 +10,16 @@ Submit via Meta Business Suite → WhatsApp Manager → Message Templates. Appro
 2. invoice_generated: "🧾 Invoice #{invoice_number} generated for {customer}. Amount: ₹{amount}. Due: {date}. [View PDF]"
 3. payment_received: "💰 Payment of ₹{amount} received from {customer} for Invoice #{invoice_number}. Thank you!"
 4. production_logged: "✅ Batch #{batch} logged. {qty} produced, {rejected} rejected ({rate}%). {defect_note}"
-5. inventory_alert: "⚠️ Low stock: {item} — {qty} {unit} remaining ({days} days supply). Reorder? [Yes/No]"
+5. inventory_alert: "⚠️ Low stock: {{1}} — {{2}} {{3}} remaining ({{4}} days supply)."
+   Body variables in order: {{1}}=item_name, {{2}}=current_quantity, {{3}}=unit, {{4}}=days_supply.
+   days_supply is floor(current_quantity / avg_daily_consumption); sent as "?" when consumption data
+   is not yet available.
    - Gujarati variant name on Meta is `inventory_alert_gujaratii` (double trailing
      'i') — intentional, NOT a typo to fix. Code maps to it via the
      GUJARATI_NAME_OVERRIDES map in src/lib/whatsapp/templates.ts.
+   - Sent by n8n/workflows/low-stock-alert.json (every 6 hours). 24-hour per-item
+     deduplication is handled server-side via audit_log (LOW_STOCK_ALERT_SENT).
+   - Tier gate: tier_2+ only (inventory feature).
 6. order_completed: "✅ Order #{order_number} complete! {qty}pc {product} ready. Generate invoice? [Yes/No]"
 
 ### Proactive Owner Notifications — Utility category (₹0.145/message)
@@ -142,8 +148,53 @@ receiving these messages — this is a UX choice, not a Meta requirement.
    ```
 
 10. daily_evening_summary (₹0.145/message): "📊 Today's wrap: {summary}..."
-9. payment_reminder (₹0.145/message): "⏰ Reminder: Invoice #{invoice_number} for {customer}, ₹{amount}, {days} days overdue."
-10. compliance_reminder (₹0.145/message): "📋 Upcoming: {task_name} due on {date}. Status: {status}."
+11. payment_reminder (₹0.145/message): "⏰ Reminder: Invoice #{invoice_number} for {customer}, ₹{amount}, {days} days overdue."
+12. compliance_reminder (₹0.145/message): "📋 Upcoming: {task_name} due on {date}. Status: {status}."
+
+13. weekly_business_summary (₹0.145/message): 7 body variables, in order:
+    {{1}} = week date range              e.g. "16–22 Jun 2026"
+    {{2}} = order count                  e.g. "12"
+    {{3}} = order total value (₹)        e.g. "₹2,45,000"
+    {{4}} = production summary           e.g. "850 pcs (94.2% yield)"
+    {{5}} = collections this week (₹)    e.g. "₹1,80,000"
+    {{6}} = ₹ saved this week            e.g. "₹3,200"
+    {{7}} = top customer (name + value)  e.g. "Mehta Steel — ₹85,000"
+
+    Note: {{6}} (₹ saved) uses time-savings only as a lightweight weekly proxy
+    (owner time saved via WhatsApp orders + production logs × ₹200/hr). The full
+    multi-factor savings engine (quality + payment speed + duplicate prevention) is
+    available on the monthly dashboard. Template copy should reflect this scope.
+
+    Note: {{7}} shows "—" when no order data exists for the week.
+
+    Sent by n8n/workflows/weekly-summary.json (Sunday 9 AM IST).
+    Tier gate: tier_2+ only.
+
+    English body (paste-ready):
+    ```
+    📊 Weekly Summary — {{1}}
+
+    📦 Orders: {{2}} (worth {{3}})
+    🏭 Production: {{4}}
+    💰 Collected: {{5}}
+    💡 Time saved this week: {{6}}
+    🏆 Top customer: {{7}}
+
+    Have a great week ahead!
+    ```
+
+    Gujarati body — weekly_business_summary_gujarati (paste-ready):
+    ```
+    📊 સાપ્તાહિક સારાંશ — {{1}}
+
+    📦 ઓર્ડર: {{2}} (કિંમત {{3}})
+    🏭 ઉત્પાદન: {{4}}
+    💰 ઉઘરાવ્યું: {{5}}
+    💡 આ સપ્તાહ સમય બચ્યો: {{6}}
+    🏆 ટોચનો ગ્રાહક: {{7}}
+
+    સારો સપ્તાહ!
+    ```
 
 ### Tiered Payment Reminders — Utility category (used by n8n/workflows/payment-reminder.json)
 **Category: utility** (NOT marketing). Submit each of the four to Meta as a

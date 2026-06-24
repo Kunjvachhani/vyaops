@@ -8,6 +8,7 @@ export const FEATURE_ACCESS: Record<string, string> = {
   cash_flow: 'tier_2', auto_mode: 'tier_2',
   whatsapp_production: 'tier_2', whatsapp_inventory: 'tier_2',
   rupee_saved_counter: 'tier_2',
+  low_stock_alerts: 'tier_2', weekly_summaries: 'tier_2',
   compliance: 'tier_3', sop_builder: 'tier_3',
   advanced_analytics: 'tier_3', cash_flow_forecast: 'tier_3',
   custom_reports: 'tier_3',
