@@ -5,6 +5,7 @@ import type { Database } from '@/types/database'
 import { logAudit } from '@/lib/utils/audit'
 import { captureWithContext } from '@/lib/utils/sentry'
 import { bulkAdjustmentSchema } from '@/lib/validations/inventory'
+import { requireTier } from '@/lib/utils/feature-gate'
 
 type InventoryRow = Database['public']['Tables']['inventory']['Row']
 type UserRow = Database['public']['Tables']['users']['Row']
@@ -23,6 +24,8 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, { status: 401 })
   }
+  const gate = await requireTier('tier_2', user.org_id)
+  if (gate) return gate
   if (user.role === 'worker' || user.role === 'viewer') {
     return NextResponse.json({ error: 'Insufficient permissions', code: 'FORBIDDEN' }, { status: 403 })
   }

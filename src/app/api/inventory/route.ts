@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import type { Database } from '@/types/database'
 import { captureWithContext } from '@/lib/utils/sentry'
+import { requireTier } from '@/lib/utils/feature-gate'
 
 type InventoryRow = Database['public']['Tables']['inventory']['Row']
 
@@ -10,6 +11,8 @@ export async function GET(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, { status: 401 })
   }
+  const gate = await requireTier('tier_2', user.org_id)
+  if (gate) return gate
 
   const sp = req.nextUrl.searchParams
   const itemType = sp.get('type') // raw_material | finished_good | null

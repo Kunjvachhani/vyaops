@@ -1,7 +1,29 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { TIER_HIERARCHY } from '@/config/features'
+import type { Tier } from '@/config/features'
 
 const PUBLIC_PATHS = new Set(['/login', '/signup', '/callback'])
+
+// Routes that require a minimum tier. Middleware redirects to /settings (billing
+// tab) when the org's tier is insufficient, rather than throwing a hard error.
+const GATED_ROUTES: Array<{ prefix: string; tier: Tier }> = [
+  { prefix: '/production', tier: 'tier_2' },
+  { prefix: '/quality', tier: 'tier_2' },
+  { prefix: '/inventory', tier: 'tier_2' },
+  { prefix: '/cash-flow', tier: 'tier_2' },
+  { prefix: '/compliance', tier: 'tier_3' },
+  { prefix: '/sop-builder', tier: 'tier_3' },
+]
+
+function requiredTierForPath(pathname: string): Tier | null {
+  for (const route of GATED_ROUTES) {
+    if (pathname === route.prefix || pathname.startsWith(route.prefix + '/')) {
+      return route.tier
+    }
+  }
+  return null
+}
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request })
@@ -63,6 +85,31 @@ export async function middleware(request: NextRequest) {
     const isPlatformAdmin = appMeta?.is_platform_admin === true
     if (!isPlatformAdmin) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+  }
+
+  // Tier-based route gating. Only runs for authenticated users on gated routes.
+  // Reads tier directly from DB so it reflects Razorpay webhook updates immediately —
+  // no session refresh required after a plan change.
+  if (isAuthed) {
+    const required = requiredTierForPath(pathname)
+    if (required) {
+      const orgId = (meta as Record<string, unknown>)?.org_id as string | undefined
+      if (orgId) {
+        const { data: orgData } = await supabase
+          .from('organizations')
+          .select('tier')
+          .eq('id', orgId)
+          .is('deleted_at', null)
+          .single()
+        const orgTier: Tier =
+          orgData?.tier && orgData.tier in TIER_HIERARCHY
+            ? (orgData.tier as Tier)
+            : 'tier_1'
+        if (TIER_HIERARCHY[orgTier] < TIER_HIERARCHY[required]) {
+          return NextResponse.redirect(new URL('/settings', request.url))
+        }
+      }
     }
   }
 

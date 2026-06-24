@@ -783,7 +783,11 @@
     "settings": "सेटिंग्स",
     "signOut": "साइन आउट",
     "openMenu": "मेनू खोलें",
-    "closeMenu": "मेनू बंद करें"
+    "closeMenu": "मेनू बंद करें",
+    "currentPlan": "वर्तमान प्लान",
+    "planStarter": "Starter",
+    "planGrowth": "Growth",
+    "planPro": "Pro"
   },
   "tiers": {
     "starter": "Starter",

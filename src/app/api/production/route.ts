@@ -5,6 +5,7 @@ import type { Database } from '@/types/database'
 import { logAudit } from '@/lib/utils/audit'
 import { captureWithContext } from '@/lib/utils/sentry'
 import { createProductionBatchSchema } from '@/lib/validations/production'
+import { requireTier } from '@/lib/utils/feature-gate'
 
 type ProductionBatchRow = Database['public']['Tables']['production_batches']['Row']
 type OrderRow = Database['public']['Tables']['orders']['Row']
@@ -294,6 +295,8 @@ export async function GET(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, { status: 401 })
   }
+  const gate = await requireTier('tier_2', user.org_id)
+  if (gate) return gate
 
   const sp = req.nextUrl.searchParams
   const page = Math.max(1, parseInt(sp.get('page') ?? '1', 10))
@@ -364,6 +367,8 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, { status: 401 })
   }
+  const gate = await requireTier('tier_2', user.org_id)
+  if (gate) return gate
   if (user.role === 'viewer') {
     return NextResponse.json({ error: 'Insufficient permissions', code: 'FORBIDDEN' }, { status: 403 })
   }

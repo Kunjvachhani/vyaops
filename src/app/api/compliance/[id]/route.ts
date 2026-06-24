@@ -5,8 +5,7 @@ import { diffChanges, logAudit } from '@/lib/utils/audit'
 import { softDelete, SoftDeleteError } from '@/lib/utils/soft-delete'
 import { captureWithContext } from '@/lib/utils/sentry'
 import { updateComplianceTaskSchema } from '@/lib/validations/compliance'
-import { hasAccess } from '@/config/features'
-import type { Tier } from '@/config/features'
+import { requireTier } from '@/lib/utils/feature-gate'
 import type { Database } from '@/types/database'
 
 type ComplianceTaskRow = Database['public']['Tables']['compliance_tasks']['Row']
@@ -29,16 +28,8 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: 'Insufficient permissions', code: 'FORBIDDEN' }, { status: 403 })
   }
 
-  const { data: orgRaw } = await adminClient
-    .from('organizations')
-    .select('tier')
-    .eq('id', user.org_id)
-    .is('deleted_at', null)
-    .single()
-  const tier = ((orgRaw as { tier: string } | null)?.tier ?? 'tier_1') as Tier
-  if (!hasAccess(tier, 'compliance')) {
-    return NextResponse.json({ error: 'Feature not available on your plan', code: 'TIER_GATE' }, { status: 403 })
-  }
+  const gate = await requireTier('tier_3', user.org_id)
+  if (gate) return gate
 
   let body: unknown
   try {
@@ -113,6 +104,8 @@ export async function DELETE(req: NextRequest, { params }: RouteContext) {
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, { status: 401 })
   }
+  const gateDelete = await requireTier('tier_3', user.org_id)
+  if (gateDelete) return gateDelete
   if (user.role === 'worker' || user.role === 'viewer') {
     return NextResponse.json({ error: 'Insufficient permissions', code: 'FORBIDDEN' }, { status: 403 })
   }

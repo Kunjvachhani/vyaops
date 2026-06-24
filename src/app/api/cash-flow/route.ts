@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import { captureWithContext } from '@/lib/utils/sentry'
+import { requireTier } from '@/lib/utils/feature-gate'
 
 function istToday(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
@@ -58,6 +59,8 @@ export async function GET(_req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, { status: 401 })
   }
+  const gate = await requireTier('tier_2', user.org_id)
+  if (gate) return gate
 
   const supabase = await createClient()
   const today = istToday()

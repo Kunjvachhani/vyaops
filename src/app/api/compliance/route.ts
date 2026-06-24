@@ -4,25 +4,13 @@ import { adminClient } from '@/lib/supabase/admin'
 import { logAudit } from '@/lib/utils/audit'
 import { captureWithContext } from '@/lib/utils/sentry'
 import { createComplianceTaskSchema } from '@/lib/validations/compliance'
-import { hasAccess } from '@/config/features'
-import type { Tier } from '@/config/features'
+import { requireTier } from '@/lib/utils/feature-gate'
 import type { Database } from '@/types/database'
 
 type ComplianceTaskRow = Database['public']['Tables']['compliance_tasks']['Row']
 
 function getIp(req: NextRequest): string {
   return req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? ''
-}
-
-async function checkTierAccess(orgId: string): Promise<{ allowed: boolean; tier: Tier }> {
-  const { data } = await adminClient
-    .from('organizations')
-    .select('tier')
-    .eq('id', orgId)
-    .is('deleted_at', null)
-    .single()
-  const tier = ((data as { tier: string } | null)?.tier ?? 'tier_1') as Tier
-  return { allowed: hasAccess(tier, 'compliance'), tier }
 }
 
 // GET /api/compliance
@@ -33,10 +21,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, { status: 401 })
   }
 
-  const { allowed } = await checkTierAccess(user.org_id)
-  if (!allowed) {
-    return NextResponse.json({ error: 'Feature not available on your plan', code: 'TIER_GATE' }, { status: 403 })
-  }
+  const gate = await requireTier('tier_3', user.org_id)
+  if (gate) return gate
 
   const sp = req.nextUrl.searchParams
   const statusFilter = sp.get('status')
@@ -95,10 +81,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Insufficient permissions', code: 'FORBIDDEN' }, { status: 403 })
   }
 
-  const { allowed } = await checkTierAccess(user.org_id)
-  if (!allowed) {
-    return NextResponse.json({ error: 'Feature not available on your plan', code: 'TIER_GATE' }, { status: 403 })
-  }
+  const gate = await requireTier('tier_3', user.org_id)
+  if (gate) return gate
 
   let body: unknown
   try {

@@ -3,8 +3,7 @@ import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { logAudit } from '@/lib/utils/audit'
 import { captureWithContext } from '@/lib/utils/sentry'
-import { hasAccess } from '@/config/features'
-import type { Tier } from '@/config/features'
+import { requireTier } from '@/lib/utils/feature-gate'
 import { z } from 'zod'
 
 const createVersionSchema = z.object({
@@ -28,17 +27,6 @@ type SopVersionRow = {
   updated_at: string
 }
 
-async function checkTierAccess(orgId: string): Promise<{ allowed: boolean; tier: Tier }> {
-  const { data } = await adminClient
-    .from('organizations')
-    .select('tier')
-    .eq('id', orgId)
-    .is('deleted_at', null)
-    .single()
-  const tier = ((data as { tier: string } | null)?.tier ?? 'tier_1') as Tier
-  return { allowed: hasAccess(tier, 'sop_builder'), tier }
-}
-
 // POST /api/sop/[id]/version — create a new draft version of an SOP
 // [id] must be the root document id
 export async function POST(
@@ -50,10 +38,8 @@ export async function POST(
     return NextResponse.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, { status: 401 })
   }
 
-  const { allowed } = await checkTierAccess(user.org_id)
-  if (!allowed) {
-    return NextResponse.json({ error: 'Feature not available on your plan', code: 'TIER_GATE' }, { status: 403 })
-  }
+  const gate = await requireTier('tier_3', user.org_id)
+  if (gate) return gate
 
   if (!['owner', 'manager'].includes(user.role)) {
     return NextResponse.json({ error: 'Insufficient permissions', code: 'FORBIDDEN' }, { status: 403 })

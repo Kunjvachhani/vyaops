@@ -10,6 +10,7 @@ import { paiseToInvoiceAmount } from '@/lib/utils/currency'
 import { formatISTDate } from '@/lib/utils/date'
 import type { Database } from '@/types/database'
 import type { TemplateComponent } from '@/types/whatsapp'
+import { requireTier } from '@/lib/utils/feature-gate'
 
 type InvoiceRow = Database['public']['Tables']['invoices']['Row']
 type CustomerRow = Database['public']['Tables']['customers']['Row']
@@ -40,6 +41,8 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, { status: 401 })
   }
+  const gate = await requireTier('tier_2', user.org_id)
+  if (gate) return gate
   if (user.role === 'worker' || user.role === 'viewer') {
     return NextResponse.json({ error: 'Insufficient permissions', code: 'FORBIDDEN' }, { status: 403 })
   }

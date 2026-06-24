@@ -855,7 +855,11 @@
     "settings": "Settings",
     "signOut": "Sign Out",
     "openMenu": "Open menu",
-    "closeMenu": "Close menu"
+    "closeMenu": "Close menu",
+    "currentPlan": "Current Plan",
+    "planStarter": "Starter",
+    "planGrowth": "Growth",
+    "planPro": "Pro"
   },
   "tiers": {
     "starter": "Starter",

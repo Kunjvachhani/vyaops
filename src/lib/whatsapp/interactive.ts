@@ -3,6 +3,8 @@ import { paiseToCurrency } from '@/lib/utils/currency'
 import { getBotStrings } from '@/lib/whatsapp/bot-strings'
 import type { Locale } from '@/lib/whatsapp/bot-strings'
 import type { Button, InteractiveMessage, ClarificationOption } from '@/types/whatsapp'
+import { TIER_HIERARCHY } from '@/config/features'
+import type { Tier } from '@/config/features'
 
 export type { InteractiveMessage, ClarificationOption }
 
@@ -298,4 +300,49 @@ export function buildStatusSummary(data: StatusSummaryData, locale: Locale = 'en
   }
 
   return lines.join('\n')
+}
+
+// ─── 6. Main menu (tier-filtered) ────────────────────────────────────────────
+
+type MenuItem = { id: string; title: string; description: string; requiredTier: Tier }
+
+const MENU_ITEMS: MenuItem[] = [
+  { id: 'new_order',     title: 'New Order',       description: 'Create a customer order',       requiredTier: 'tier_1' },
+  { id: 'order_status',  title: 'Order Status',    description: 'Check open order progress',     requiredTier: 'tier_1' },
+  { id: 'send_invoice',  title: 'Send Invoice',    description: 'Send invoice via WhatsApp',     requiredTier: 'tier_1' },
+  { id: 'log_production',title: 'Log Production',  description: 'Log today\'s batch output',     requiredTier: 'tier_2' },
+  { id: 'stock_check',   title: 'Stock Check',     description: 'View current inventory levels', requiredTier: 'tier_2' },
+  { id: 'compliance',    title: 'Compliance',      description: 'Upcoming filing deadlines',     requiredTier: 'tier_3' },
+]
+
+/**
+ * Build the WhatsApp interactive list menu, showing only items the org's tier
+ * allows. Always returns at least the tier_1 items.
+ */
+export function buildMainMenu(orgTier: Tier): InteractiveMessage {
+  const orgTierNum = TIER_HIERARCHY[orgTier]
+  const rows = MENU_ITEMS
+    .filter((item) => TIER_HIERARCHY[item.requiredTier] <= orgTierNum)
+    .map((item) => ({
+      id: item.id,
+      title: trunc(item.title, LIST_TITLE_MAX),
+      description: trunc(item.description, LIST_DESC_MAX),
+    }))
+
+  return {
+    type: 'list',
+    body: 'What would you like to do?',
+    sections: [{ title: 'Options', rows }],
+  }
+}
+
+/**
+ * Message sent to the owner when they attempt to use a feature their plan does
+ * not include. appUrl should be NEXT_PUBLIC_APP_URL.
+ */
+export function buildGatedFeatureMessage(
+  featureName: string,
+  appUrl: string
+): string {
+  return `🔒 *${featureName}* is available on the Professional plan.\n\nUpgrade at: ${appUrl}/settings`
 }

@@ -144,7 +144,7 @@ export function DashboardShell({ orgName, orgTier, userEmail, children }: Props)
             })}
           </div>
 
-          {/* Settings pinned at bottom */}
+          {/* Settings + Current Plan pinned at bottom */}
           <div className="mt-auto border-t pt-2">
             <Link
               href="/settings"
@@ -159,6 +159,18 @@ export function DashboardShell({ orgName, orgTier, userEmail, children }: Props)
               <Settings size={18} aria-hidden="true" />
               <span>{t('settings')}</span>
             </Link>
+
+            {/* Current Plan badge */}
+            <div className="px-3 pb-2 pt-1">
+              <span className="text-xs text-muted-foreground">{t('currentPlan')}: </span>
+              <span className="text-xs font-medium">
+                {orgTier === 'tier_1'
+                  ? t('planStarter')
+                  : orgTier === 'tier_2'
+                    ? t('planGrowth')
+                    : t('planPro')}
+              </span>
+            </div>
           </div>
         </nav>
       </aside>

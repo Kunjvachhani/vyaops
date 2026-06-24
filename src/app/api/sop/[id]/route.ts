@@ -3,8 +3,7 @@ import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { logAudit, diffChanges } from '@/lib/utils/audit'
 import { captureWithContext } from '@/lib/utils/sentry'
-import { hasAccess } from '@/config/features'
-import type { Tier } from '@/config/features'
+import { requireTier } from '@/lib/utils/feature-gate'
 import { z } from 'zod'
 
 const SOP_CATEGORIES = ['production', 'quality', 'safety', 'maintenance'] as const
@@ -32,17 +31,6 @@ type SopRow = {
   deleted_at: string | null
 }
 
-async function checkTierAccess(orgId: string): Promise<{ allowed: boolean; tier: Tier }> {
-  const { data } = await adminClient
-    .from('organizations')
-    .select('tier')
-    .eq('id', orgId)
-    .is('deleted_at', null)
-    .single()
-  const tier = ((data as { tier: string } | null)?.tier ?? 'tier_1') as Tier
-  return { allowed: hasAccess(tier, 'sop_builder'), tier }
-}
-
 // GET /api/sop/[id] — get a root SOP with all its versions
 // [id] must be the root document id (parent_id IS NULL)
 export async function GET(
@@ -55,10 +43,8 @@ export async function GET(
     return NextResponse.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, { status: 401 })
   }
 
-  const { allowed } = await checkTierAccess(user.org_id)
-  if (!allowed) {
-    return NextResponse.json({ error: 'Feature not available on your plan', code: 'TIER_GATE' }, { status: 403 })
-  }
+  const gate = await requireTier('tier_3', user.org_id)
+  if (gate) return gate
 
   const { id } = await params
   const supabase = await createClient()
@@ -104,10 +90,8 @@ export async function PATCH(
     return NextResponse.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, { status: 401 })
   }
 
-  const { allowed } = await checkTierAccess(user.org_id)
-  if (!allowed) {
-    return NextResponse.json({ error: 'Feature not available on your plan', code: 'TIER_GATE' }, { status: 403 })
-  }
+  const gate = await requireTier('tier_3', user.org_id)
+  if (gate) return gate
 
   if (!['owner', 'manager'].includes(user.role)) {
     return NextResponse.json({ error: 'Insufficient permissions', code: 'FORBIDDEN' }, { status: 403 })

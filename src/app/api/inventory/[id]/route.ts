@@ -5,6 +5,7 @@ import type { Database } from '@/types/database'
 import { logAudit } from '@/lib/utils/audit'
 import { captureWithContext } from '@/lib/utils/sentry'
 import { manualAdjustmentSchema } from '@/lib/validations/inventory'
+import { requireTier } from '@/lib/utils/feature-gate'
 
 type InventoryRow = Database['public']['Tables']['inventory']['Row']
 type UserRow = Database['public']['Tables']['users']['Row']
@@ -26,6 +27,8 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, { status: 401 })
   }
+  const gate = await requireTier('tier_2', user.org_id)
+  if (gate) return gate
 
   const supabase = await createClient()
 
@@ -85,6 +88,8 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, { status: 401 })
   }
+  const gate = await requireTier('tier_2', user.org_id)
+  if (gate) return gate
   if (user.role === 'worker' || user.role === 'viewer') {
     return NextResponse.json({ error: 'Insufficient permissions', code: 'FORBIDDEN' }, { status: 403 })
   }

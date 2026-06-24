@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import type { Database } from '@/types/database'
 import { captureWithContext } from '@/lib/utils/sentry'
+import { requireTier } from '@/lib/utils/feature-gate'
 
 type ProductionBatchRow = Database['public']['Tables']['production_batches']['Row']
 type OrderRow = Database['public']['Tables']['orders']['Row']
@@ -23,6 +24,8 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, { status: 401 })
   }
+  const gate = await requireTier('tier_2', user.org_id)
+  if (gate) return gate
 
   const supabase = await createClient()
   const { data: batchRaw, error } = await supabase
