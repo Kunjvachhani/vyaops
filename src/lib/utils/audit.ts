@@ -19,6 +19,7 @@ export type AuditEntityType =
   | 'production_batch'
   | 'inventory'
   | 'compliance_task'
+  | 'sop_document'
   | 'user'
   | 'organization'
 
@@ -51,6 +52,7 @@ const TABLE_NAME: Record<AuditEntityType, string> = {
   production_batch: 'production_batches',
   inventory: 'inventory',
   compliance_task: 'compliance_tasks',
+  sop_document: 'sop_documents',
   user: 'users',
   organization: 'organizations',
 }

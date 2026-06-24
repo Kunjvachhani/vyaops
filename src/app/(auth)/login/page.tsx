@@ -1,10 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { z } from 'zod'
+import { createBrowserClient } from '@supabase/ssr'
+import type { Database } from '@/types/database'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -26,6 +28,36 @@ export default function LoginPage() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [serverError, setServerError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Handle implicit auth flow: magic links and password-reset emails produced by
+  // Supabase land here as /login#access_token=...&refresh_token=...
+  // (PKCE links go through /callback?code= instead, but admin-generated links
+  //  and some email templates use implicit flow.)
+  useEffect(() => {
+    const hash = window.location.hash.substring(1)
+    if (!hash.includes('access_token')) return
+
+    const params = new URLSearchParams(hash)
+    const accessToken = params.get('access_token')
+    const refreshToken = params.get('refresh_token')
+    if (!accessToken || !refreshToken) return
+
+    const supabase = createBrowserClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+
+    supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+      .then(({ error }) => {
+        if (!error) {
+          // Clear the hash from the URL then navigate to dashboard
+          history.replaceState(null, '', window.location.pathname)
+          router.replace('/dashboard')
+        }
+      })
+      .catch(() => { /* silent — user can still log in manually */ })
+  }, [router])
+
 
   const tabs = [
     { href: '/login', label: t('auth.login') },

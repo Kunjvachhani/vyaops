@@ -1326,6 +1326,7 @@ export type Database = {
           deleted_at: string | null
           id: string
           organization_id: string
+          parent_id: string | null
           published_at: string | null
           published_by: string | null
           status: string
@@ -1340,6 +1341,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           organization_id: string
+          parent_id?: string | null
           published_at?: string | null
           published_by?: string | null
           status?: string
@@ -1354,6 +1356,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           organization_id?: string
+          parent_id?: string | null
           published_at?: string | null
           published_by?: string | null
           status?: string
