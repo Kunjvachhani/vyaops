@@ -926,6 +926,7 @@ export type Database = {
           id: string
           industry_config: string
           language_preference: string
+          logo_url: string | null
           name: string
           onboarded_at: string | null
           phone: string
@@ -955,6 +956,7 @@ export type Database = {
           id?: string
           industry_config?: string
           language_preference?: string
+          logo_url?: string | null
           name: string
           onboarded_at?: string | null
           phone: string
@@ -984,6 +986,7 @@ export type Database = {
           id?: string
           industry_config?: string
           language_preference?: string
+          logo_url?: string | null
           name?: string
           onboarded_at?: string | null
           phone?: string

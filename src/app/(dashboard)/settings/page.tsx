@@ -1,9 +1,24 @@
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { createClient, getCurrentUser } from '@/lib/supabase/server'
-import { formatIST } from '@/lib/utils/date'
-import { PreferencesForm } from './_components/preferences-form'
+import { adminClient } from '@/lib/supabase/admin'
+import type { Database } from '@/types/database'
+import { SettingsTabs } from './_components/settings-tabs'
+
+type OrgRow = Database['public']['Tables']['organizations']['Row']
+type UserRow = {
+  id: string
+  full_name: string
+  email: string | null
+  role: string
+  last_login_at: string | null
+  is_active: boolean
+}
+type BillingEventRow = {
+  id: string
+  event_type: string
+  created_at: string
+}
 
 export default async function SettingsPage() {
   const t = await getTranslations('pages.settings')
@@ -12,23 +27,34 @@ export default async function SettingsPage() {
   if (!user) redirect('/login')
 
   const supabase = await createClient()
-  const { data, error } = await supabase
+
+  const { data: orgRaw, error: orgError } = await supabase
     .from('organizations')
-    .select('whatsapp_proactive_enabled, whatsapp_proactive_set_at')
+    .select('*')
     .eq('id', user.org_id)
     .is('deleted_at', null)
     .single()
 
-  if (error || !data) redirect('/login')
+  if (orgError || !orgRaw) redirect('/login')
 
-  const org = data as {
-    whatsapp_proactive_enabled: boolean
-    whatsapp_proactive_set_at: string | null
-  }
+  const org = orgRaw as OrgRow
 
-  const lastChangedLabel = org.whatsapp_proactive_set_at
-    ? formatIST(new Date(org.whatsapp_proactive_set_at))
-    : null
+  const { data: usersRaw } = await adminClient
+    .from('users')
+    .select('id, full_name, email, role, last_login_at, is_active')
+    .eq('organization_id', user.org_id)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: true })
+
+  const { data: billingRaw } = await adminClient
+    .from('billing_events')
+    .select('id, event_type, created_at')
+    .eq('organization_id', user.org_id)
+    .order('created_at', { ascending: false })
+    .limit(20)
+
+  const users = (usersRaw ?? []) as UserRow[]
+  const billingEvents = (billingRaw ?? []) as BillingEventRow[]
 
   return (
     <div className="space-y-6">
@@ -37,32 +63,32 @@ export default async function SettingsPage() {
         <p className="mt-1 text-muted-foreground">{t('description')}</p>
       </div>
 
-      {/* Tab bar — Preferences is the only tab for now; more tabs (Profile,
-          Billing, Team) land in later sprints. */}
-      <div className="border-b">
-        <nav className="-mb-px flex gap-6" aria-label="Settings tabs">
-          <span
-            aria-current="page"
-            className="border-b-2 border-primary px-1 pb-3 text-sm font-medium text-foreground"
-          >
-            {t('tabs.preferences')}
-          </span>
-        </nav>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            {t('preferences.whatsappTitle')}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <PreferencesForm
-            initialEnabled={org.whatsapp_proactive_enabled}
-            lastChangedLabel={lastChangedLabel}
-          />
-        </CardContent>
-      </Card>
+      <SettingsTabs
+        org={{
+          id: org.id,
+          name: org.name,
+          gstin: org.gstin,
+          address: org.address,
+          city: org.city,
+          state: org.state,
+          phone: org.phone,
+          email: org.email,
+          industry_config: org.industry_config,
+          logo_url: org.logo_url,
+          tier: org.tier,
+          billing_status: org.billing_status,
+          tier_valid_until: org.tier_valid_until,
+          razorpay_subscription_id: org.razorpay_subscription_id,
+          language_preference: org.language_preference,
+          timezone: org.timezone,
+          whatsapp_proactive_enabled: org.whatsapp_proactive_enabled,
+          whatsapp_proactive_set_at: org.whatsapp_proactive_set_at,
+        }}
+        users={users}
+        billingEvents={billingEvents}
+        currentUserId={user.id}
+        currentUserRole={user.role}
+      />
     </div>
   )
 }
