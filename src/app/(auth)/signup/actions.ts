@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { adminClient } from '@/lib/supabase/admin'
 import { captureWithContext } from '@/lib/utils/sentry'
 
-type SignupResult = { error: string } | { success: true }
+type SignupResult = { error: string } | { success: true; selectedTier: 'tier_1' | 'tier_2' | 'tier_3' }
 
 export async function signupAction(formData: FormData): Promise<SignupResult> {
   const email = formData.get('email') as string
@@ -17,7 +17,16 @@ export async function signupAction(formData: FormData): Promise<SignupResult> {
   const role = 'owner'
   const address = (formData.get('address') as string | null) || null
   const gstin = ((formData.get('gstin') as string | null) || '').trim().toUpperCase() || null
-  const tier = (formData.get('tier') as string) || 'tier_1'
+
+  // SECURITY: the signup plan picker is a PREFERENCE only — it never grants a paid tier.
+  // organizations.tier is the access key and is set ONLY by the Razorpay webhook after payment
+  // (see docs/security/FEATURE_GATING.md). Honoring a client-chosen tier here would let anyone
+  // unlock every gated feature for free. Every new org is provisioned at tier_1; a paid
+  // selection just routes the new owner to billing checkout (handled by the signup page).
+  const rawSelectedTier = (formData.get('tier') as string) || 'tier_1'
+  const selectedTier: 'tier_1' | 'tier_2' | 'tier_3' =
+    rawSelectedTier === 'tier_2' || rawSelectedTier === 'tier_3' ? rawSelectedTier : 'tier_1'
+  const tier = 'tier_1' as const
 
   const supabase = await createClient()
 
@@ -105,7 +114,7 @@ export async function signupAction(formData: FormData): Promise<SignupResult> {
       // Non-fatal: user can sign in manually to get a fresh JWT
     }
 
-    return { success: true }
+    return { success: true, selectedTier }
   } catch (err) {
     captureWithContext(err, { action: 'signup/unexpected' })
     await adminClient.auth.admin.deleteUser(authUserId).catch(() => {})

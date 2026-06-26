@@ -82,8 +82,9 @@ async function callGraphApi(
 
   const url = `${GRAPH_API_BASE}/${cleanPhoneNumberId}/messages`
 
-  // Always log token prefix so we can verify which token Vercel is using
-  console.log(`[meta-api] attempt pid=${cleanPhoneNumberId} tok=${accessToken.slice(0, 15) || 'UNSET'}`)
+  // Log only that a token is present — NEVER its value/prefix (security rule #8: no secrets
+  // in logs). pid is the public phone-number id, safe to log for routing diagnostics.
+  console.log(`[meta-api] attempt pid=${cleanPhoneNumberId} tok=${accessToken ? 'SET' : 'UNSET'}`)
 
   let lastError = 'Unknown error'
 

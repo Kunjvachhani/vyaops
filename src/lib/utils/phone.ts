@@ -32,3 +32,16 @@ export function normalizePhone(raw: string): string {
 export function phonesMatch(a: string, b: string): boolean {
   return normalizePhone(a) === normalizePhone(b)
 }
+
+/**
+ * Mask a phone for logging: keep a 2-digit country prefix + last 4 digits, e.g.
+ *   919876543210 → 91XXXX3210
+ * Security rule #8: never write full phone numbers to console/Sentry. Use this
+ * before logging ANY phone value.
+ */
+export function maskPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '')
+  if (digits.length < 6) return 'XXXX'
+  const prefix = digits.length > 10 ? digits.slice(0, 2) : ''
+  return `${prefix}XXXX${digits.slice(-4)}`
+}

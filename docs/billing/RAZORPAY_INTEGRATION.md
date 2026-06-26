@@ -18,7 +18,9 @@
 | Worker attendance | ₹1,999/mo | addon_attendance |
 
 ## Flow
-1. Customer selects plan on /pricing page
+0. Signup: org is ALWAYS created at `tier_1` (the signup plan picker is a preference only —
+   it never grants a paid tier). A paid selection routes the new owner to Settings → Billing.
+1. Owner selects/confirms plan on Settings → Billing (or /pricing)
 2. Razorpay Checkout opens (UPI, card, netbanking)
 3. First payment → Razorpay creates subscription with UPI Autopay mandate
 4. Webhook: subscription.authenticated → activate org, set tier
@@ -28,6 +30,13 @@
 8. Grace period expires → downgrade to tier_1 features
 9. 30 days unpaid → suspend account
 10. 90 days unpaid → archive data
+
+> **SECURITY — tier is webhook-authoritative:** `organizations.tier` is the access key
+> enforced by middleware. It is set ONLY by this webhook handler (steps 4–5) after a real
+> payment, never from client input at signup. See `docs/security/FEATURE_GATING.md`
+> ("Tier provisioning is server-authoritative"). Middleware additionally gates tier_2+ routes
+> on `billing_status ∈ {active, grace_period}`, so a halted/suspended org loses paid access
+> even if its `tier` column has not yet been downgraded.
 
 ## Webhook Handler: POST /api/webhooks/razorpay
 1. Verify X-Razorpay-Signature

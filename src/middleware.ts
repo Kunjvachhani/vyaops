@@ -1,29 +1,14 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { TIER_HIERARCHY } from '@/config/features'
+import { TIER_HIERARCHY, requiredTierForRoute, billingAllowsPaidAccess } from '@/config/features'
 import type { Tier } from '@/config/features'
 
 const PUBLIC_PATHS = new Set(['/login', '/signup', '/callback'])
 
-// Routes that require a minimum tier. Middleware redirects to /settings (billing
-// tab) when the org's tier is insufficient, rather than throwing a hard error.
-const GATED_ROUTES: Array<{ prefix: string; tier: Tier }> = [
-  { prefix: '/production', tier: 'tier_2' },
-  { prefix: '/quality', tier: 'tier_2' },
-  { prefix: '/inventory', tier: 'tier_2' },
-  { prefix: '/cash-flow', tier: 'tier_2' },
-  { prefix: '/compliance', tier: 'tier_3' },
-  { prefix: '/sop-builder', tier: 'tier_3' },
-]
-
-function requiredTierForPath(pathname: string): Tier | null {
-  for (const route of GATED_ROUTES) {
-    if (pathname === route.prefix || pathname.startsWith(route.prefix + '/')) {
-      return route.tier
-    }
-  }
-  return null
-}
+// Route → required-tier gating is derived from FEATURE_ACCESS via requiredTierForRoute()
+// (src/config/features.ts) — the SINGLE source of truth. No second hardcoded prefix→tier
+// table here (it would silently drift when a feature is re-tiered). Middleware redirects to
+// /settings (billing tab) when the org's tier/billing is insufficient, not a hard error.
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request })
@@ -54,7 +39,7 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   // A user counts as "authenticated for the app" only once their JWT carries
-  // org_id + role in user_metadata — the same predicate getCurrentUser() and
+  // org_id + role in app_metadata — the same predicate getCurrentUser() and
   // the RLS policies use. Keying off bare session existence here while the
   // dashboard layout keys off org_id causes an infinite /login ⇄ /dashboard
   // redirect loop whenever the JWT is stale (e.g. right after signup, before
@@ -88,17 +73,20 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Tier-based route gating. Only runs for authenticated users on gated routes.
-  // Reads tier directly from DB so it reflects Razorpay webhook updates immediately —
-  // no session refresh required after a plan change.
+  // Tier-based route gating. Only runs for authenticated users on gated (tier_2+) routes.
+  // Reads tier + billing_status directly from DB so it reflects Razorpay webhook updates
+  // immediately — no session refresh required after a plan change. Two gates:
+  //   1. tier must meet the route's required tier (FEATURE_ACCESS-derived).
+  //   2. billing_status must allow paid access (active/grace_period) — a suspended/cancelled
+  //      org loses tier_2+ access even if its tier column has not yet been downgraded.
   if (isAuthed) {
-    const required = requiredTierForPath(pathname)
+    const required = requiredTierForRoute(pathname)
     if (required) {
       const orgId = (meta as Record<string, unknown>)?.org_id as string | undefined
       if (orgId) {
         const { data: orgData } = await supabase
           .from('organizations')
-          .select('tier')
+          .select('tier, billing_status')
           .eq('id', orgId)
           .is('deleted_at', null)
           .single()
@@ -106,7 +94,9 @@ export async function middleware(request: NextRequest) {
           orgData?.tier && orgData.tier in TIER_HIERARCHY
             ? (orgData.tier as Tier)
             : 'tier_1'
-        if (TIER_HIERARCHY[orgTier] < TIER_HIERARCHY[required]) {
+        const tierOk = TIER_HIERARCHY[orgTier] >= TIER_HIERARCHY[required]
+        const billingOk = billingAllowsPaidAccess(orgData?.billing_status)
+        if (!tierOk || !billingOk) {
           return NextResponse.redirect(new URL('/settings', request.url))
         }
       }
