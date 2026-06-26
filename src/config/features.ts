@@ -20,3 +20,33 @@ export function hasAccess(orgTier: Tier, featureKey: string): boolean {
   if (!required) return false;
   return TIER_HIERARCHY[orgTier] >= TIER_HIERARCHY[required as Tier];
 }
+
+// Maps a gated dashboard route prefix → its feature key. The route's required tier is then
+// derived from FEATURE_ACCESS, so there is ONE source of truth for tier gating (no separate
+// hardcoded prefix→tier table in middleware that can drift). See docs/security/FEATURE_GATING.md.
+export const ROUTE_FEATURE: Record<string, string> = {
+  '/production': 'production',
+  '/quality': 'quality',
+  '/inventory': 'inventory',
+  '/cash-flow': 'cash_flow',
+  '/compliance': 'compliance',
+  '/sop-builder': 'sop_builder',
+};
+
+// Returns the minimum tier required to access `pathname`, or null if the route is ungated.
+export function requiredTierForRoute(pathname: string): Tier | null {
+  for (const [prefix, featureKey] of Object.entries(ROUTE_FEATURE)) {
+    if (pathname === prefix || pathname.startsWith(prefix + '/')) {
+      const required = FEATURE_ACCESS[featureKey];
+      if (required && required in TIER_HIERARCHY) return required as Tier;
+    }
+  }
+  return null;
+}
+
+// billing_status values that still grant paid (tier_2+) route access. A halted subscription
+// keeps access through its grace period; suspended/cancelled lose it immediately.
+const PAID_ACCESS_BILLING_STATUSES = new Set(['active', 'grace_period']);
+export function billingAllowsPaidAccess(billingStatus: string | null | undefined): boolean {
+  return PAID_ACCESS_BILLING_STATUSES.has(billingStatus ?? '');
+}

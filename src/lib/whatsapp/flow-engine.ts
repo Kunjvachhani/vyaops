@@ -25,6 +25,7 @@ import {
 import { getBotStrings } from '@/lib/whatsapp/bot-strings'
 import type { Locale } from '@/lib/whatsapp/bot-strings'
 import { formatISTDate, toIST } from '@/lib/utils/date'
+import { maskPhone } from '@/lib/utils/phone'
 import type { Database } from '@/types/database'
 
 type PendingOrderRow = Database['public']['Tables']['pending_orders']['Row']
@@ -224,7 +225,7 @@ export async function handleCustomerMessage(
     source_message_id: messageId,
   })
 
-  console.log('[flow-engine] pending_order created:', intent.intent, 'for', customerPhone)
+  console.log('[flow-engine] pending_order created:', intent.intent, 'for', maskPhone(customerPhone))
 }
 
 // ─── Owner echo handler ───────────────────────────────────────────────────────
@@ -781,7 +782,7 @@ async function recordCorrection(
       })
       return
     }
-    console.log('[flow-engine] correction recorded (whatsapp_edit) for', chatPhone)
+    console.log('[flow-engine] correction recorded (whatsapp_edit) for', maskPhone(chatPhone))
   } catch (err) {
     captureWithContext(err, { action: 'flow-engine/recordCorrection' })
   }
@@ -856,7 +857,7 @@ async function handleStatusCommand(orgId: string, chatPhone: string): Promise<vo
     .maybeSingle()
 
   if (!customer) {
-    console.log('[flow-engine] /status: no customer found for', chatPhone)
+    console.log('[flow-engine] /status: no customer found for', maskPhone(chatPhone))
     return
   }
 
@@ -957,6 +958,19 @@ async function handleOwnerOrderTrigger(
   if (!draftText) return
 
   const sendResult = await sendTextMessage(chatPhone, draftText, orgId)
+
+  // Never advance state on a failed send — the customer never saw the draft, so the
+  // owner's later "ok" must not create an order. Leave state 'detected' so a retry can
+  // re-post the draft. (Mirrors handleEchoForDetected.)
+  if (!sendResult.success) {
+    captureWithContext(new Error(sendResult.error ?? 'draft send failed'), {
+      action: 'flow-engine/handleOwnerOrderTrigger',
+      org_id: orgId,
+      pending_id: pending.id,
+    })
+    return
+  }
+
   await adminClient
     .from('pending_orders')
     .update({ state: 'draft_posted', draft_message_id: sendResult.messageId ?? null })

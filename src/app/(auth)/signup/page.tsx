@@ -91,6 +91,10 @@ export default function SignupPage() {
       const result = await signupAction(formData)
       if ('error' in result) {
         setServerError(result.error || t('auth.signupError'))
+      } else if (result.selectedTier !== 'tier_1') {
+        // Every org is provisioned at tier_1; a paid plan is granted only after Razorpay
+        // checkout. Route the new owner to Settings → Billing to complete payment.
+        router.replace('/settings?tab=billing&plan=' + result.selectedTier)
       } else {
         router.replace('/dashboard')
       }

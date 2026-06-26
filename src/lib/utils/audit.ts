@@ -40,6 +40,10 @@ export type AuditEntry = {
   changes: Change[]
   metadata?: Record<string, unknown>
   ip_address?: string
+  // Explicit audit source. When omitted, it is inferred from metadata.via_whatsapp
+  // ('whatsapp' | 'web'). Pass this for non-tenant flows (e.g. 'scheduled', 'api',
+  // 'system') so audit rows record where the mutation actually came from.
+  source?: AuditSource
 }
 
 const TABLE_NAME: Record<AuditEntityType, string> = {
@@ -98,7 +102,7 @@ export async function logAudit(entry: AuditEntry): Promise<void> {
       : null
 
   const source: AuditSource =
-    entry.metadata?.via_whatsapp === true ? 'whatsapp' : 'web'
+    entry.source ?? (entry.metadata?.via_whatsapp === true ? 'whatsapp' : 'web')
 
   const { error } = await adminClient.from('audit_log').insert({
     organization_id: entry.organization_id,

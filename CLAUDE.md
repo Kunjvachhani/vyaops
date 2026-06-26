@@ -130,8 +130,15 @@ npm run test:benchmark         # AI eval benchmark suite
 4. EVERY destructive action requires explicit user confirmation.
 5. EVERY webhook authenticates before processing. WhatsApp webhook: X-Hub-Signature-256 HMAC (DUALHOOK_SIGNING_SECRET / META_WHATSAPP_APP_SECRET) OR the secret URL token (WHATSAPP_WEBHOOK_URL_TOKEN, `?t=` query param) — required because Dualhook Coexistence deliveries are signed with Dualhook's tech-provider app secret, which is not exposed to us. Razorpay webhook: RAZORPAY_WEBHOOK_SECRET signature.
 6. EVERY API route checks org tier before allowing feature access.
-7. NEVER trust client-side tier checks alone. Re-verify server-side.
-8. NEVER log sensitive data (full phones, GSTINs, amounts) to Sentry.
+7. NEVER trust client-side tier checks alone. Re-verify server-side. **`organizations.tier` is the
+   access key — it is set ONLY by the Razorpay webhook after payment. Signup ALWAYS provisions
+   `tier_1` and ignores any client-supplied tier (the signup plan picker is a preference that routes
+   the owner to billing checkout, never a grant). Middleware derives a route's required tier from
+   `FEATURE_ACCESS` via `requiredTierForRoute()` (single source of truth — never a second hardcoded
+   prefix→tier table) and additionally gates tier_2+ routes on `billing_status ∈ {active, grace_period}`.**
+8. NEVER log sensitive data (full phones, GSTINs, amounts, tokens/secrets) — NOT to Sentry and NOT to
+   `console.*` (Vercel captures stdout). Mask phones with `maskPhone()` before logging; never log access
+   tokens or secret prefixes in production.
 9. All monetary values stored as PAISE (integer). No floats for money.
 10. All timestamps stored as UTC. Displayed as IST.
 11. `audit_log`, `whatsapp_messages`, `whatsapp_sessions`, `industry_dictionary`, and `global_dictionary`
