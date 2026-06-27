@@ -1131,6 +1131,38 @@
       "tour3": "Type /status in any customer chat for an instant summary.",
       "goToDashboard": "Go to Dashboard",
       "finishing": "Finishing up…"
+    },
+    "vendors": {
+      "title": "Add your suppliers",
+      "subtitle": "Add the vendors you buy raw material from.",
+      "name": "Name",
+      "phone": "Phone",
+      "material": "What they supply",
+      "addRow": "Add another"
+    },
+    "orders": {
+      "title": "Add your open orders",
+      "subtitle": "Orders that are confirmed but not yet delivered.",
+      "loading": "Loading…",
+      "needData": "Add at least one customer and one product first.",
+      "customer": "Customer",
+      "product": "Product",
+      "quantity": "Quantity",
+      "price": "Unit price (₹)",
+      "deliveryDate": "Delivery date (optional)",
+      "addRow": "Add another order",
+      "remove": "Remove"
+    },
+    "invoices": {
+      "title": "Add your open invoices",
+      "subtitle": "Unpaid invoices customers still owe you.",
+      "loading": "Loading…",
+      "needData": "Add at least one customer first.",
+      "customer": "Customer",
+      "amount": "Amount due (₹)",
+      "dueDate": "Due date",
+      "addRow": "Add another invoice",
+      "remove": "Remove"
     }
   }
 }

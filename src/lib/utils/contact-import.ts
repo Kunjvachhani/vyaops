@@ -76,7 +76,10 @@ export function parseDelimitedText(text: string): ParsedContact[] {
 
 export async function parseXlsx(buffer: ArrayBuffer): Promise<ParsedContact[]> {
   const workbook = new ExcelJS.Workbook()
-  await workbook.xlsx.load(buffer)
+  // exceljs expects a Node Buffer — passing a raw ArrayBuffer throws at runtime.
+  // Cast to the method's exact param type to sidestep a @types/node Buffer-generic mismatch.
+  const data = Buffer.from(buffer) as unknown as Parameters<typeof workbook.xlsx.load>[0]
+  await workbook.xlsx.load(data)
   const sheet = workbook.worksheets[0]
   if (!sheet) return []
 

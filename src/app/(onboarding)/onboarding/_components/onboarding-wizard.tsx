@@ -11,11 +11,16 @@ import {
   saveCompanyDetails,
   addCustomers,
   addProducts,
+  addVendors,
+  addOrders,
+  addInvoices,
+  listOnboardingEntities,
   parseContactsFile,
   generateDictionary,
   confirmEntry,
   completeOnboarding,
   type ReviewEntry,
+  type OnboardingEntities,
 } from '../actions'
 import {
   WhatsAppEmbeddedSignup,
@@ -33,10 +38,13 @@ type OrgData = {
 }
 
 type Lang = 'gu' | 'hi' | 'en'
-const TOTAL_STEPS = 7
+const TOTAL_STEPS = 10
 
 type CustomerRow = { name: string; phone: string; city: string }
+type VendorRow = { name: string; phone: string; material: string }
 type ProductRow = { name: string; price: string } // price in rupees (string for input)
+type OrderRow = { customerId: string; productId: string; quantity: string; price: string; deliveryDate: string }
+type InvoiceRow = { customerId: string; amount: string; dueDate: string }
 type ReviewState = ReviewEntry & { status: 'pending' | 'confirmed' | 'rejected' }
 
 export function OnboardingWizard({ org, ownerName }: { org: OrgData; ownerName: string }) {
@@ -101,9 +109,36 @@ export function OnboardingWizard({ org, ownerName }: { org: OrgData; ownerName: 
             onNext={next}
           />
         )}
-        {step === 5 && <StepDictionary t={t} onNext={next} />}
-        {step === 6 && <StepWhatsApp t={t} onNext={next} />}
+        {step === 5 && (
+          <StepVendors
+            t={t}
+            busy={isPending}
+            onError={setError}
+            startTransition={startTransition}
+            onNext={next}
+          />
+        )}
+        {step === 6 && (
+          <StepOrders
+            t={t}
+            busy={isPending}
+            onError={setError}
+            startTransition={startTransition}
+            onNext={next}
+          />
+        )}
         {step === 7 && (
+          <StepInvoices
+            t={t}
+            busy={isPending}
+            onError={setError}
+            startTransition={startTransition}
+            onNext={next}
+          />
+        )}
+        {step === 8 && <StepDictionary t={t} onNext={next} />}
+        {step === 9 && <StepWhatsApp t={t} onNext={next} />}
+        {step === 10 && (
           <StepDone
             t={t}
             busy={isPending}
@@ -116,7 +151,7 @@ export function OnboardingWizard({ org, ownerName }: { org: OrgData; ownerName: 
 
       {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
 
-      {step > 1 && step < 7 && (
+      {step > 1 && step < 10 && (
         <div className="mt-6 flex items-center justify-between border-t pt-4">
           <button
             type="button"
@@ -697,6 +732,412 @@ function StepProducts({
           {t('skip')}
         </SkipButton>
         <PrimaryButton onClick={() => proceed(false)} disabled={busy}>
+          {busy ? t('saving') : t('next')}
+        </PrimaryButton>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Vendors
+// ---------------------------------------------------------------------------
+
+function StepVendors({
+  t,
+  busy,
+  onError,
+  startTransition,
+  onNext,
+}: {
+  t: TFn
+  busy: boolean
+  onError: (e: string | null) => void
+  startTransition: React.TransitionStartFunction
+  onNext: () => void
+}) {
+  const [rows, setRows] = useState<VendorRow[]>([
+    { name: '', phone: '', material: '' },
+    { name: '', phone: '', material: '' },
+    { name: '', phone: '', material: '' },
+  ])
+
+  function update(i: number, field: keyof VendorRow, value: string) {
+    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)))
+    onError(null)
+  }
+
+  function addRow() {
+    setRows((prev) => [...prev, { name: '', phone: '', material: '' }])
+  }
+
+  function proceed(skip: boolean) {
+    onError(null)
+    const filled = rows.filter((r) => r.name.trim())
+    if (skip || filled.length === 0) {
+      onNext()
+      return
+    }
+    startTransition(async () => {
+      const res = await addVendors(
+        filled.map((r) => ({ name: r.name.trim(), phone: r.phone.trim(), material: r.material.trim() }))
+      )
+      if (!res.ok) {
+        onError(t('saveFailed'))
+        return
+      }
+      onNext()
+    })
+  }
+
+  return (
+    <div>
+      <h2 className="text-xl font-semibold">{t('vendors.title')}</h2>
+      <p className="mt-1 text-sm text-muted-foreground">{t('vendors.subtitle')}</p>
+
+      <div className="mt-6 space-y-2">
+        {rows.map((row, i) => (
+          <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <input
+              placeholder={t('vendors.name')}
+              value={row.name}
+              onChange={(e) => update(i, 'name', e.target.value)}
+              disabled={busy}
+              className="input-field"
+            />
+            <input
+              placeholder={t('vendors.phone')}
+              value={row.phone}
+              onChange={(e) => update(i, 'phone', e.target.value)}
+              disabled={busy}
+              className="input-field"
+            />
+            <input
+              placeholder={t('vendors.material')}
+              value={row.material}
+              onChange={(e) => update(i, 'material', e.target.value)}
+              disabled={busy}
+              className="input-field"
+            />
+          </div>
+        ))}
+      </div>
+
+      <button type="button" onClick={addRow} disabled={busy} className="mt-3 text-sm text-primary underline-offset-2 hover:underline disabled:opacity-50">
+        + {t('vendors.addRow')}
+      </button>
+
+      <div className="mt-8 flex items-center justify-end gap-2">
+        <SkipButton onClick={() => proceed(true)} disabled={busy}>
+          {t('skip')}
+        </SkipButton>
+        <PrimaryButton onClick={() => proceed(false)} disabled={busy}>
+          {busy ? t('saving') : t('next')}
+        </PrimaryButton>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Open orders — needs the customers + products saved in earlier steps
+// ---------------------------------------------------------------------------
+
+function rupeesToPaise(rupees: string): number {
+  const n = parseFloat(rupees)
+  return Number.isFinite(n) ? Math.round(n * 100) : 0
+}
+
+function StepOrders({
+  t,
+  busy,
+  onError,
+  startTransition,
+  onNext,
+}: {
+  t: TFn
+  busy: boolean
+  onError: (e: string | null) => void
+  startTransition: React.TransitionStartFunction
+  onNext: () => void
+}) {
+  const [entities, setEntities] = useState<OnboardingEntities | null>(null)
+  const [rows, setRows] = useState<OrderRow[]>([
+    { customerId: '', productId: '', quantity: '', price: '', deliveryDate: '' },
+  ])
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const res = await listOnboardingEntities()
+      if (active && res.ok) setEntities(res.data)
+      else if (active) setEntities({ customers: [], products: [] })
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  function update(i: number, field: keyof OrderRow, value: string) {
+    setRows((prev) =>
+      prev.map((r, idx) => {
+        if (idx !== i) return r
+        const nextRow = { ...r, [field]: value }
+        // Prefill price from the selected product.
+        if (field === 'productId' && entities) {
+          const prod = entities.products.find((p) => p.id === value)
+          if (prod && !r.price) nextRow.price = (prod.unit_price_paise / 100).toString()
+        }
+        return nextRow
+      })
+    )
+    onError(null)
+  }
+
+  function addRow() {
+    setRows((prev) => [...prev, { customerId: '', productId: '', quantity: '', price: '', deliveryDate: '' }])
+  }
+
+  function remove(i: number) {
+    setRows((prev) => prev.filter((_, idx) => idx !== i))
+  }
+
+  function proceed(skip: boolean) {
+    onError(null)
+    const filled = rows.filter((r) => r.customerId && r.productId && parseInt(r.quantity, 10) > 0)
+    if (skip || filled.length === 0) {
+      onNext()
+      return
+    }
+    startTransition(async () => {
+      const res = await addOrders(
+        filled.map((r) => ({
+          customerId: r.customerId,
+          productId: r.productId,
+          quantity: parseInt(r.quantity, 10),
+          unitPricePaise: rupeesToPaise(r.price),
+          deliveryDate: r.deliveryDate || '',
+        }))
+      )
+      if (!res.ok) {
+        onError(t('saveFailed'))
+        return
+      }
+      onNext()
+    })
+  }
+
+  const ready = entities !== null
+  const canAdd = ready && entities.customers.length > 0 && entities.products.length > 0
+
+  return (
+    <div>
+      <h2 className="text-xl font-semibold">{t('orders.title')}</h2>
+      <p className="mt-1 text-sm text-muted-foreground">{t('orders.subtitle')}</p>
+
+      <div className="mt-6">
+        {!ready && <p className="text-sm text-muted-foreground">{t('orders.loading')}</p>}
+
+        {ready && !canAdd && (
+          <p className="text-sm text-muted-foreground">{t('orders.needData')}</p>
+        )}
+
+        {canAdd && (
+          <div className="space-y-3">
+            {rows.map((row, i) => (
+              <div key={i} className="rounded-md border p-3">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <select value={row.customerId} onChange={(e) => update(i, 'customerId', e.target.value)} disabled={busy} className="input-field">
+                    <option value="">{t('orders.customer')}</option>
+                    {entities.customers.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  <select value={row.productId} onChange={(e) => update(i, 'productId', e.target.value)} disabled={busy} className="input-field">
+                    <option value="">{t('orders.product')}</option>
+                    {entities.products.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                  <input
+                    placeholder={t('orders.quantity')}
+                    value={row.quantity}
+                    inputMode="numeric"
+                    onChange={(e) => update(i, 'quantity', e.target.value.replace(/[^0-9]/g, ''))}
+                    disabled={busy}
+                    className="input-field"
+                  />
+                  <input
+                    placeholder={t('orders.price')}
+                    value={row.price}
+                    inputMode="decimal"
+                    onChange={(e) => update(i, 'price', e.target.value.replace(/[^0-9.]/g, ''))}
+                    disabled={busy}
+                    className="input-field"
+                  />
+                  <label className="text-xs text-muted-foreground sm:col-span-2">
+                    {t('orders.deliveryDate')}
+                    <input
+                      type="date"
+                      value={row.deliveryDate}
+                      onChange={(e) => update(i, 'deliveryDate', e.target.value)}
+                      disabled={busy}
+                      className="input-field mt-1"
+                    />
+                  </label>
+                </div>
+                {rows.length > 1 && (
+                  <button type="button" onClick={() => remove(i)} disabled={busy} className="mt-2 text-xs text-muted-foreground hover:text-destructive disabled:opacity-50">
+                    {t('orders.remove')}
+                  </button>
+                )}
+              </div>
+            ))}
+            <button type="button" onClick={addRow} disabled={busy} className="text-sm text-primary underline-offset-2 hover:underline disabled:opacity-50">
+              + {t('orders.addRow')}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-8 flex items-center justify-end gap-2">
+        <SkipButton onClick={() => proceed(true)} disabled={busy}>
+          {t('skip')}
+        </SkipButton>
+        <PrimaryButton onClick={() => proceed(false)} disabled={busy || !canAdd}>
+          {busy ? t('saving') : t('next')}
+        </PrimaryButton>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Open invoices — needs the customers saved in earlier steps
+// ---------------------------------------------------------------------------
+
+function StepInvoices({
+  t,
+  busy,
+  onError,
+  startTransition,
+  onNext,
+}: {
+  t: TFn
+  busy: boolean
+  onError: (e: string | null) => void
+  startTransition: React.TransitionStartFunction
+  onNext: () => void
+}) {
+  const [customers, setCustomers] = useState<OnboardingEntities['customers'] | null>(null)
+  const [rows, setRows] = useState<InvoiceRow[]>([{ customerId: '', amount: '', dueDate: '' }])
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const res = await listOnboardingEntities()
+      if (active) setCustomers(res.ok ? res.data.customers : [])
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  function update(i: number, field: keyof InvoiceRow, value: string) {
+    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)))
+    onError(null)
+  }
+
+  function addRow() {
+    setRows((prev) => [...prev, { customerId: '', amount: '', dueDate: '' }])
+  }
+
+  function remove(i: number) {
+    setRows((prev) => prev.filter((_, idx) => idx !== i))
+  }
+
+  function proceed(skip: boolean) {
+    onError(null)
+    const filled = rows.filter((r) => r.customerId && rupeesToPaise(r.amount) > 0 && r.dueDate)
+    if (skip || filled.length === 0) {
+      onNext()
+      return
+    }
+    startTransition(async () => {
+      const res = await addInvoices(
+        filled.map((r) => ({
+          customerId: r.customerId,
+          totalPaise: rupeesToPaise(r.amount),
+          dueDate: r.dueDate,
+        }))
+      )
+      if (!res.ok) {
+        onError(t('saveFailed'))
+        return
+      }
+      onNext()
+    })
+  }
+
+  const ready = customers !== null
+  const canAdd = ready && customers.length > 0
+
+  return (
+    <div>
+      <h2 className="text-xl font-semibold">{t('invoices.title')}</h2>
+      <p className="mt-1 text-sm text-muted-foreground">{t('invoices.subtitle')}</p>
+
+      <div className="mt-6">
+        {!ready && <p className="text-sm text-muted-foreground">{t('invoices.loading')}</p>}
+        {ready && !canAdd && <p className="text-sm text-muted-foreground">{t('invoices.needData')}</p>}
+
+        {canAdd && (
+          <div className="space-y-2">
+            {rows.map((row, i) => (
+              <div key={i} className="grid grid-cols-1 items-end gap-2 sm:grid-cols-3">
+                <select value={row.customerId} onChange={(e) => update(i, 'customerId', e.target.value)} disabled={busy} className="input-field">
+                  <option value="">{t('invoices.customer')}</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <input
+                  placeholder={t('invoices.amount')}
+                  value={row.amount}
+                  inputMode="decimal"
+                  onChange={(e) => update(i, 'amount', e.target.value.replace(/[^0-9.]/g, ''))}
+                  disabled={busy}
+                  className="input-field"
+                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    aria-label={t('invoices.dueDate')}
+                    value={row.dueDate}
+                    onChange={(e) => update(i, 'dueDate', e.target.value)}
+                    disabled={busy}
+                    className="input-field"
+                  />
+                  {rows.length > 1 && (
+                    <button type="button" onClick={() => remove(i)} disabled={busy} aria-label={t('invoices.remove')} className="px-1 text-muted-foreground hover:text-destructive disabled:opacity-50">
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+            <button type="button" onClick={addRow} disabled={busy} className="text-sm text-primary underline-offset-2 hover:underline disabled:opacity-50">
+              + {t('invoices.addRow')}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-8 flex items-center justify-end gap-2">
+        <SkipButton onClick={() => proceed(true)} disabled={busy}>
+          {t('skip')}
+        </SkipButton>
+        <PrimaryButton onClick={() => proceed(false)} disabled={busy || !canAdd}>
           {busy ? t('saving') : t('next')}
         </PrimaryButton>
       </div>

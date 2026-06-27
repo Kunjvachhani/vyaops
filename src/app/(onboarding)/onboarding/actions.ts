@@ -16,6 +16,7 @@ import {
   confirmOnboardingEntry,
 } from '@/lib/ai/dialect-learner'
 import type { ParsedContact } from '@/lib/utils/contact-import'
+import type { OnboardingDictResult } from '@/types/ai'
 
 // ---------------------------------------------------------------------------
 // Shared result type (mirrors settings/actions.ts)
@@ -242,6 +243,35 @@ export type ReviewEntry = {
   category: string
 }
 
+// Deterministic alias guesses used when the AI is unavailable. e.g.
+// "Valve Body" → ["valve body", "valvebody", "vb", "valve"].
+function heuristicAliases(name: string): string[] {
+  const lower = name.trim().toLowerCase()
+  if (!lower) return []
+  const words = lower.split(/\s+/).filter(Boolean)
+  const out = new Set<string>([lower])
+  if (words.length > 1) {
+    out.add(words.join(''))
+    out.add(words.map((w) => w[0]).join(''))
+    out.add(words[0])
+  }
+  return [...out].filter((a) => a.length >= 2)
+}
+
+function buildHeuristicDict(
+  products: CreatedEntity[],
+  customers: CreatedEntity[]
+): OnboardingDictResult {
+  return {
+    products: products
+      .map((p) => ({ name: p.name, aliases: heuristicAliases(p.name) }))
+      .filter((x) => x.aliases.length > 0),
+    customers: customers
+      .map((c) => ({ name: c.name, aliases: heuristicAliases(c.name) }))
+      .filter((x) => x.aliases.length > 0),
+  }
+}
+
 export async function generateDictionary(): Promise<
   ActionResult<ReviewEntry[]> | { ok: false; error: 'need_data' }
 > {
@@ -291,7 +321,15 @@ export async function generateDictionary(): Promise<
     const productIdMap = new Map(productList.map((p) => [p.name, p.id]))
     const customerIdMap = new Map(customerList.map((c) => [c.name, c.id]))
 
-    await saveOnboardingDictionary(user.org_id, result, productIdMap, customerIdMap)
+    // The AI returns nothing when the model is unreachable/misconfigured or
+    // declines. Fall back to deterministic heuristic aliases so the review step
+    // is never empty when products/customers exist.
+    const aiAliasCount =
+      result.products.reduce((n, p) => n + p.aliases.length, 0) +
+      result.customers.reduce((n, c) => n + c.aliases.length, 0)
+    const dict = aiAliasCount > 0 ? result : buildHeuristicDict(productList, customerList)
+
+    await saveOnboardingDictionary(user.org_id, dict, productIdMap, customerIdMap)
   } catch (e) {
     captureWithContext(e, { action: 'onboarding/generateDictionary', org_id: user.org_id })
     return { ok: false, error: 'generate_failed' }
@@ -432,6 +470,287 @@ export async function connectWhatsApp(
   })
 
   return { ok: true, data: { displayPhoneNumber: display } }
+}
+
+// ---------------------------------------------------------------------------
+// Vendors
+// ---------------------------------------------------------------------------
+
+const VendorsSchema = z
+  .array(
+    z.object({
+      name: z.string().min(1).max(255),
+      phone: z.string().max(20).optional(),
+      material: z.string().max(255).optional(),
+    })
+  )
+  .min(1)
+  .max(50)
+
+export async function addVendors(raw: unknown): Promise<ActionResult<CreatedEntity[]>> {
+  const { user, error } = await requireOwner()
+  if (!user) return { ok: false, error }
+
+  const parsed = VendorsSchema.safeParse(raw)
+  if (!parsed.success) return { ok: false, error: 'validation_failed' }
+
+  const rows = parsed.data.map((v) => ({
+    organization_id: user.org_id,
+    name: v.name.trim(),
+    phone: toCanonicalIndianMobile(v.phone),
+    materials_supplied: v.material?.trim() ? [v.material.trim()] : [],
+  }))
+
+  const { data, error: insertError } = await adminClient
+    .from('vendors')
+    .insert(rows)
+    .select('id, name')
+
+  if (insertError || !data) {
+    captureWithContext(insertError ?? new Error('vendor insert returned null'), {
+      action: 'onboarding/addVendors',
+      org_id: user.org_id,
+    })
+    return { ok: false, error: 'insert_failed' }
+  }
+
+  const created = data as CreatedEntity[]
+  for (const v of created) {
+    await logAudit({
+      organization_id: user.org_id,
+      user_id: user.id,
+      action: 'create',
+      entity_type: 'vendor',
+      entity_id: v.id,
+      changes: [{ field: 'name', old_value: null, new_value: v.name }],
+      source: 'web',
+    })
+  }
+
+  return { ok: true, data: created }
+}
+
+// ---------------------------------------------------------------------------
+// Entity lister — customers + products for the open-orders / open-invoices steps
+// ---------------------------------------------------------------------------
+
+export type OnboardingEntities = {
+  customers: Array<{ id: string; name: string }>
+  products: Array<{ id: string; name: string; unit_price_paise: number }>
+}
+
+export async function listOnboardingEntities(): Promise<ActionResult<OnboardingEntities>> {
+  const { user, error } = await requireOwner()
+  if (!user) return { ok: false, error }
+
+  const [{ data: customers }, { data: products }] = await Promise.all([
+    adminClient
+      .from('customers')
+      .select('id, name')
+      .eq('organization_id', user.org_id)
+      .is('deleted_at', null)
+      .order('name')
+      .limit(200),
+    adminClient
+      .from('products')
+      .select('id, name, unit_price_paise')
+      .eq('organization_id', user.org_id)
+      .is('deleted_at', null)
+      .order('name')
+      .limit(200),
+  ])
+
+  return {
+    ok: true,
+    data: {
+      customers: (customers ?? []) as OnboardingEntities['customers'],
+      products: (products ?? []) as OnboardingEntities['products'],
+    },
+  }
+}
+
+// Generate ORD-/INV- numbers via the existing DB sequence functions.
+type NumberRpc = (
+  fn: 'generate_order_number' | 'generate_invoice_number'
+) => Promise<{ data: string | null; error: { message: string } | null }>
+
+// ---------------------------------------------------------------------------
+// Open orders
+// ---------------------------------------------------------------------------
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+
+const OrdersSchema = z
+  .array(
+    z.object({
+      customerId: z.string().uuid(),
+      productId: z.string().uuid(),
+      quantity: z.number().int().positive().max(1_000_000),
+      unitPricePaise: z.number().int().min(0).max(1_000_000_000),
+      deliveryDate: z.string().regex(ISO_DATE).optional().or(z.literal('')),
+    })
+  )
+  .min(1)
+  .max(50)
+
+export async function addOrders(raw: unknown): Promise<ActionResult<{ count: number }>> {
+  const { user, error } = await requireOwner()
+  if (!user) return { ok: false, error }
+
+  const parsed = OrdersSchema.safeParse(raw)
+  if (!parsed.success) return { ok: false, error: 'validation_failed' }
+
+  // Verify every referenced customer/product belongs to this org (adminClient
+  // bypasses RLS, so ownership must be checked explicitly).
+  const [{ data: custs }, { data: prods }] = await Promise.all([
+    adminClient.from('customers').select('id').eq('organization_id', user.org_id).is('deleted_at', null),
+    adminClient.from('products').select('id').eq('organization_id', user.org_id).is('deleted_at', null),
+  ])
+  const validCust = new Set((custs ?? []).map((c) => (c as { id: string }).id))
+  const validProd = new Set((prods ?? []).map((p) => (p as { id: string }).id))
+
+  let count = 0
+  for (const o of parsed.data) {
+    if (!validCust.has(o.customerId) || !validProd.has(o.productId)) continue
+
+    const { data: num, error: seqErr } = await (adminClient.rpc as unknown as NumberRpc)(
+      'generate_order_number'
+    )
+    if (seqErr || !num) {
+      captureWithContext(seqErr ?? new Error('generate_order_number null'), {
+        action: 'onboarding/addOrders/seq',
+        org_id: user.org_id,
+      })
+      continue
+    }
+
+    const total = o.quantity * o.unitPricePaise
+    const { data: created, error: insertError } = await adminClient
+      .from('orders')
+      .insert({
+        organization_id: user.org_id,
+        order_number: num,
+        customer_id: o.customerId,
+        product_id: o.productId,
+        quantity: o.quantity,
+        unit_price_paise: o.unitPricePaise,
+        total_amount_paise: total,
+        status: 'confirmed',
+        source: 'manual',
+        delivery_date: o.deliveryDate ? o.deliveryDate : null,
+      })
+      .select('id, order_number')
+      .single()
+
+    if (insertError || !created) {
+      captureWithContext(insertError ?? new Error('order insert null'), {
+        action: 'onboarding/addOrders',
+        org_id: user.org_id,
+      })
+      continue
+    }
+
+    count++
+    await logAudit({
+      organization_id: user.org_id,
+      user_id: user.id,
+      action: 'create',
+      entity_type: 'order',
+      entity_id: (created as { id: string }).id,
+      changes: [
+        { field: 'order_number', old_value: null, new_value: (created as { order_number: string }).order_number },
+      ],
+      source: 'web',
+    })
+  }
+
+  return { ok: true, data: { count } }
+}
+
+// ---------------------------------------------------------------------------
+// Open invoices
+// ---------------------------------------------------------------------------
+
+const InvoicesSchema = z
+  .array(
+    z.object({
+      customerId: z.string().uuid(),
+      totalPaise: z.number().int().positive().max(1_000_000_000_000),
+      dueDate: z.string().regex(ISO_DATE),
+    })
+  )
+  .min(1)
+  .max(50)
+
+export async function addInvoices(raw: unknown): Promise<ActionResult<{ count: number }>> {
+  const { user, error } = await requireOwner()
+  if (!user) return { ok: false, error }
+
+  const parsed = InvoicesSchema.safeParse(raw)
+  if (!parsed.success) return { ok: false, error: 'validation_failed' }
+
+  const { data: custs } = await adminClient
+    .from('customers')
+    .select('id')
+    .eq('organization_id', user.org_id)
+    .is('deleted_at', null)
+  const validCust = new Set((custs ?? []).map((c) => (c as { id: string }).id))
+
+  let count = 0
+  for (const inv of parsed.data) {
+    if (!validCust.has(inv.customerId)) continue
+
+    const { data: num, error: seqErr } = await (adminClient.rpc as unknown as NumberRpc)(
+      'generate_invoice_number'
+    )
+    if (seqErr || !num) {
+      captureWithContext(seqErr ?? new Error('generate_invoice_number null'), {
+        action: 'onboarding/addInvoices/seq',
+        org_id: user.org_id,
+      })
+      continue
+    }
+
+    // Onboarding captures the outstanding total only — no tax breakdown.
+    const { data: created, error: insertError } = await adminClient
+      .from('invoices')
+      .insert({
+        organization_id: user.org_id,
+        invoice_number: num,
+        customer_id: inv.customerId,
+        subtotal_paise: inv.totalPaise,
+        tax_rate: 0,
+        tax_amount_paise: 0,
+        total_amount_paise: inv.totalPaise,
+        status: 'sent',
+        due_date: inv.dueDate,
+      })
+      .select('id, invoice_number')
+      .single()
+
+    if (insertError || !created) {
+      captureWithContext(insertError ?? new Error('invoice insert null'), {
+        action: 'onboarding/addInvoices',
+        org_id: user.org_id,
+      })
+      continue
+    }
+
+    count++
+    await logAudit({
+      organization_id: user.org_id,
+      user_id: user.id,
+      action: 'create',
+      entity_type: 'invoice',
+      entity_id: (created as { id: string }).id,
+      changes: [
+        { field: 'invoice_number', old_value: null, new_value: (created as { invoice_number: string }).invoice_number },
+      ],
+      source: 'web',
+    })
+  }
+
+  return { ok: true, data: { count } }
 }
 
 // ---------------------------------------------------------------------------
