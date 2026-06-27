@@ -309,10 +309,9 @@ vyaops/
 │   │   ├── features.ts               # Feature → tier map
 │   │   ├── industries/
 │   │   │   └── foundry.json
-│   │   ├── dialect/                   # Static dialect dictionaries (Tier 1 + 2)
-│   │   │   ├── universal.json         # Tier 1: Gujarati language base (~3000 entries)
-│   │   │   └── business.json          # Tier 2: Cross-industry business vocab (~200 entries)
-│   │   └── whatsapp-menus.ts
+│   │   └── dialect/                   # Static dialect dictionaries (Tier 1 + 2)
+│   │       ├── universal.json         # Tier 1: Gujarati language base (~3000 entries)
+│   │       └── business.json          # Tier 2: Cross-industry business vocab (~200 entries)
 │   ├── types/
 │   │   ├── database.ts               # Auto-generated from Supabase
 │   │   ├── whatsapp.ts
