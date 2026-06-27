@@ -208,7 +208,7 @@ Fallback:
 
 3. **DeepSeek at $0.435/M tokens** handles 90% of calls. Qwen only fires for eval gate + complex reasoning.
 
-4. **Batch processing:** Daily summaries (#6) and onboarding alias generation (#10) are batched, not per-message.
+4. **Batch processing:** Daily summaries (#6) and onboarding alias generation (#10) are batched, not per-message. The onboarding wizard (S8.1) runs #10 once after products/customers are saved; if the model is unreachable or returns nothing it falls back to deterministic heuristic aliases so the owner always has entries to review.
 
 ---
 

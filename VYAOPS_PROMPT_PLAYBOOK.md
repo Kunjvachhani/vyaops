@@ -3525,7 +3525,28 @@ git push
 
 ### S8.1 — Onboarding Wizard (2 hours)
 
-**PROMPT:**
+> **⚠️ AS-BUILT (2026-06-27) — shipped as a 10-step wizard. This note is the source of truth; the original 7-step prompt below is preserved for history.**
+>
+> **Location & gating**
+> - Lives in its OWN route group: `src/app/(onboarding)/onboarding/page.tsx` (NOT `(dashboard)`). A fullscreen wizard must not inherit the dashboard shell, and keeping it outside `(dashboard)` avoids a redirect loop. URL is still `/onboarding`.
+> - New column `organizations.onboarding_status` (`pending` | `complete`, migration `20260627000001`, CHECK + backfill of already-onboarded orgs → `complete`). The `(dashboard)` layout redirects owners with `pending` → `/onboarding`; the `(onboarding)` layout redirects completed/non-owners → `/dashboard`. Completion sets `onboarding_status='complete'` + `onboarded_at`.
+> - Every write is an **owner-gated, audited server action** in `(onboarding)/onboarding/actions.ts` using `adminClient` — no new public API routes.
+>
+> **The 10 steps**
+> 1. **Welcome + language** — gu/hi/en; sets the `locale` cookie AND `organizations.language_preference`.
+> 2. **Company details** — name, address, GSTIN, **industry from the real 18-segment taxonomy** in `src/config/industries` (NOT "foundry/ceramics/brass"); logo upload → `org-logos` Supabase bucket.
+> 3. **Customers** — Name/Phone/City rows **+ import CSV / XLSX / PDF** (`src/lib/utils/contact-import.ts`, exceljs + pdf-parse, parsed server-side with position-agnostic row classification). Owner reviews parsed rows before saving; phones canonicalized at save (`toCanonicalIndianMobile`), invalid ones dropped (name still kept).
+> 4. **Products** — one-click templates derived from the chosen industry's `examples`, editable ₹ price (stored as paise), + custom products.
+> 5. **Suppliers (vendors)** — Name/Phone/Material → `materials_supplied`.
+> 6. **Open orders** — customer + product (auto-fills unit price) + qty + delivery date → `status='confirmed'`, `source='manual'`, `ORD-` number via `generate_order_number()`. Customer/product refs are org-ownership-verified server-side.
+> 7. **Open invoices** — customer + amount due + due date → `status='sent'`, `INV-` number via `generate_invoice_number()` (subtotal=total, tax 0).
+> 8. **Generate dialect dictionary** — `generateOnboardingDictionary()` → `saveOnboardingDictionary()` (source `onboarding_ai`, confidence 0.7) → review list → `confirmOnboardingEntry()` (confidence 1.0 / deactivate). **Heuristic fallback:** when the AI is unreachable/returns nothing, deterministic aliases are synthesized (e.g. "Valve Body" → `valve body` / `valvebody` / `vb` / `valve`) so the review is never empty when data exists.
+> 9. **Connect WhatsApp** — real Meta Embedded Signup against **Dualhook's** tech-provider app (FB JS SDK → `code` + `phone_number_id` → `connectWhatsApp` action → `src/lib/whatsapp/dualhook.ts` finalize → stores `whatsapp_phone_number_id` / `whatsapp_connected`). Config-gated on `NEXT_PUBLIC_FB_APP_ID` / `NEXT_PUBLIC_FB_CONFIG_ID`; graceful manual-instructions fallback when unset. See `docs/architecture/WHATSAPP_COEXISTENCE.md` → "In-app Embedded Signup".
+> 10. **Done** — quick tour + "Go to Dashboard".
+>
+> i18n: full `onboarding` namespace (incl. `vendors`/`orders`/`invoices`) in en/gu/hi. Every data step is skippable.
+
+**ORIGINAL PROMPT (historical 7-step spec — superseded by the AS-BUILT note above):**
 ```
 Build a new-user onboarding wizard that runs after first signup.
 
@@ -3580,15 +3601,18 @@ Don't show wizard again for completed orgs.
 **VERIFY:**
 ```bash
 npm run dev
-# Create new account → should redirect to onboarding wizard
-# Walk through all 7 steps → should save data at each step
-# Step 5: dialect dictionary aliases generated and shown for review
-# Finish → redirect to dashboard → wizard doesn't show again
+# Create a NEW account → org provisions onboarding_status='pending' → redirected to /onboarding
+#   (existing owners were backfilled to 'complete' and are NOT bounced into the wizard)
+# Walk through all 10 steps → each step saves via its owner-gated server action
+# Step 3: import a CSV/XLSX/PDF of contacts → parsed rows appear for review before saving
+# Step 8 (dialect): aliases generated and shown for review (heuristic fallback if AI is offline)
+# Step 9 (WhatsApp): real embedded signup when NEXT_PUBLIC_FB_APP_ID/CONFIG_ID are set; manual note otherwise
+# Finish → onboarding_status='complete' → redirect to /dashboard → wizard never shows again
 ```
 
 **COMMIT:**
 ```bash
-git add . && git commit -m "feat: onboarding wizard — 7-step setup with dialect dictionary generation"
+git add . && git commit -m "feat: onboarding wizard — 10-step setup, contact import, embedded signup, dialect dictionary"
 git push
 ```
 
