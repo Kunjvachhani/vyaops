@@ -929,6 +929,7 @@ export type Database = {
           logo_url: string | null
           name: string
           onboarded_at: string | null
+          onboarding_status: string
           phone: string
           razorpay_customer_id: string | null
           razorpay_subscription_id: string | null
@@ -959,6 +960,7 @@ export type Database = {
           logo_url?: string | null
           name: string
           onboarded_at?: string | null
+          onboarding_status?: string
           phone: string
           razorpay_customer_id?: string | null
           razorpay_subscription_id?: string | null
@@ -989,6 +991,7 @@ export type Database = {
           logo_url?: string | null
           name?: string
           onboarded_at?: string | null
+          onboarding_status?: string
           phone?: string
           razorpay_customer_id?: string | null
           razorpay_subscription_id?: string | null
@@ -1373,6 +1376,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sop_documents_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "sop_documents"
             referencedColumns: ["id"]
           },
           {

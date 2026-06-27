@@ -8,9 +8,18 @@ const nextConfig: NextConfig = {
   images: {
     domains: [],
   },
-  // Puppeteer / Chromium are native packages that must not be bundled by the
-  // server compiler — they're loaded at runtime from node_modules instead.
-  serverExternalPackages: ['puppeteer', 'puppeteer-core', '@sparticuz/chromium'],
+  // Native / heavy server-only packages that must not be bundled by the server
+  // compiler — loaded at runtime from node_modules instead. Puppeteer/Chromium
+  // for PDF generation; pdf-parse (+ its pdfjs-dist) and exceljs for the
+  // onboarding contact-import parser.
+  serverExternalPackages: [
+    'puppeteer',
+    'puppeteer-core',
+    '@sparticuz/chromium',
+    'pdf-parse',
+    'pdfjs-dist',
+    'exceljs',
+  ],
 }
 
 export default withSentryConfig(withNextIntl(nextConfig), {

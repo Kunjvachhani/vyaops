@@ -443,13 +443,20 @@ Key tasks:
 **6-8 sessions**
 
 Key tasks:
-1. Onboarding wizard for new customers
-   - Step 5 (Connect WhatsApp) must include a checkbox, **default checked**:
-     "Send me daily order summaries, payment reminders, and compliance alerts
-     via WhatsApp". It writes to `organizations.whatsapp_proactive_enabled`
-     (and sets `whatsapp_proactive_set_at = now()` when the owner toggles it).
-     The column + the matching Settings → Preferences toggle already exist
-     (migration `20260618000001_add_whatsapp_proactive_preference.sql`, S8.1).
+1. Onboarding wizard for new customers — **BUILT (2026-06-27), shipped as 10 steps.**
+   - Route group `src/app/(onboarding)/onboarding/` (own group, fullscreen — not `(dashboard)`).
+     Gated by `organizations.onboarding_status` ('pending' | 'complete', migration
+     `20260627000001`): `(dashboard)` layout sends `pending` owners to `/onboarding`.
+   - Steps: language · company (+logo) · customers (CSV/XLSX/PDF import) · products
+     (industry templates) · vendors · open orders · open invoices · dialect dictionary
+     (with heuristic fallback) · connect WhatsApp (Dualhook Embedded Signup) · done.
+   - All writes are owner-gated, audited server actions in `(onboarding)/onboarding/actions.ts`.
+   - See `VYAOPS_PROMPT_PLAYBOOK.md` → S8.1 "AS-BUILT" note for the authoritative spec.
+   - The proactive-notification checkbox (default checked) writes to
+     `organizations.whatsapp_proactive_enabled` (+ `whatsapp_proactive_set_at`); the column +
+     Settings → Preferences toggle already exist (migration
+     `20260618000001_add_whatsapp_proactive_preference.sql`). *(Not yet wired into the wizard's
+     WhatsApp step — currently lives only in Settings → Preferences.)*
 2. Admin dashboard (our internal view)
 3. End-to-end testing (all flows)
 4. Performance optimization

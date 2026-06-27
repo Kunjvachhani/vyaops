@@ -309,10 +309,9 @@ vyaops/
 │   │   ├── features.ts               # Feature → tier map
 │   │   ├── industries/
 │   │   │   └── foundry.json
-│   │   ├── dialect/                   # Static dialect dictionaries (Tier 1 + 2)
-│   │   │   ├── universal.json         # Tier 1: Gujarati language base (~3000 entries)
-│   │   │   └── business.json          # Tier 2: Cross-industry business vocab (~200 entries)
-│   │   └── whatsapp-menus.ts
+│   │   └── dialect/                   # Static dialect dictionaries (Tier 1 + 2)
+│   │       ├── universal.json         # Tier 1: Gujarati language base (~3000 entries)
+│   │       └── business.json          # Tier 2: Cross-industry business vocab (~200 entries)
 │   ├── types/
 │   │   ├── database.ts               # Auto-generated from Supabase
 │   │   ├── whatsapp.ts
@@ -393,7 +392,11 @@ META_WHATSAPP_VERIFY_TOKEN=
 META_WHATSAPP_APP_SECRET=
 DUALHOOK_API_KEY=
 DUALHOOK_SIGNING_SECRET=         # optional: Dualhook tech-provider app secret (ask their support)
+DUALHOOK_API_BASE=               # optional: Dualhook REST base (default https://api.dualhook.com/v1)
 WHATSAPP_WEBHOOK_URL_TOKEN=      # random token in the webhook URL (?t=...) — auth fallback under Coexistence
+NEXT_PUBLIC_FB_APP_ID=           # Dualhook Meta App ID — Embedded Signup JS SDK (public)
+NEXT_PUBLIC_FB_CONFIG_ID=        # Dualhook Embedded-Signup configuration_id, Coexistence (public)
+NEXT_PUBLIC_FB_GRAPH_VERSION=    # optional: Graph API version for FB.init (default v21.0)
 
 # n8n orchestration + internal callbacks
 N8N_WEBHOOK_URL=                 # n8n master-handler production webhook

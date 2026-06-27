@@ -51,7 +51,8 @@ logo_url            TEXT                             -- public URL in org-logos 
 whatsapp_proactive_enabled  BOOLEAN NOT NULL DEFAULT TRUE  -- receives scheduled notifications (summary, reminders, compliance)
 whatsapp_proactive_set_at   TIMESTAMPTZ                    -- when the preference was last explicitly changed
 timezone            TEXT NOT NULL DEFAULT 'Asia/Kolkata'
-onboarded_at        TIMESTAMPTZ
+onboarding_status   TEXT NOT NULL DEFAULT 'pending'   -- pending | complete (onboarding wizard gate; owners with 'pending' are routed to /onboarding)
+onboarded_at        TIMESTAMPTZ                       -- set when the onboarding wizard is finished
 created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 deleted_at          TIMESTAMPTZ

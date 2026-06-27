@@ -31,6 +31,13 @@ export default async function DashboardLayout({
   // the result is narrowed through control-flow after redirect().
   const org = data as OrgRow
 
+  // Owners who have not finished the onboarding wizard are routed to it. The
+  // (onboarding) route group lives outside this layout, so there is no redirect
+  // loop. Team members are never gated on onboarding.
+  if (user.role === 'owner' && org.onboarding_status !== 'complete') {
+    redirect('/onboarding')
+  }
+
   const orgTier: Tier =
     org.tier in TIER_HIERARCHY ? (org.tier as Tier) : 'tier_1'
 

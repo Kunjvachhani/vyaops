@@ -116,3 +116,23 @@ export const INDUSTRIES: Industry[] = [
     examples: 'Surgical Instruments, Disposables, Diagnostic Equipment, Implants, Hospital Furniture',
   },
 ]
+
+export const INDUSTRY_VALUES = INDUSTRIES.map((i) => i.value)
+
+export function isIndustryValue(value: string): value is IndustryValue {
+  return INDUSTRY_VALUES.includes(value as IndustryValue)
+}
+
+/**
+ * Suggested starter product names for an industry, derived from its `examples`.
+ * Used by the onboarding wizard (Step 4) to offer one-click template products.
+ * Returns [] for unknown industry values.
+ */
+export function productTemplatesFor(value: string): string[] {
+  const industry = INDUSTRIES.find((i) => i.value === value)
+  if (!industry) return []
+  return industry.examples
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
