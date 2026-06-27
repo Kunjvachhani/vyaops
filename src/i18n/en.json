@@ -1041,5 +1041,96 @@
         "action": "Action"
       }
     }
+  },
+  "onboarding": {
+    "stepOf": "Step {current} of {total}",
+    "back": "Back",
+    "next": "Next",
+    "skip": "I'll do this later",
+    "saving": "Saving…",
+    "saveFailed": "Something went wrong. Please try again.",
+    "step1": {
+      "title": "Welcome to VyaOps, {name}!",
+      "subtitle": "Let's set up your factory in 5 minutes.",
+      "languageLabel": "Choose your language",
+      "gu": "ગુજરાતી (Gujarati)",
+      "hi": "हिन्दी (Hindi)",
+      "en": "English"
+    },
+    "step2": {
+      "title": "Your factory details",
+      "subtitle": "We've pre-filled what we know. Add the rest.",
+      "companyName": "Company name",
+      "address": "Address",
+      "gstin": "GSTIN",
+      "gstinHint": "15-character GST number (optional)",
+      "industry": "Industry",
+      "industryHint": "This decides your product templates and quality defect list.",
+      "logo": "Logo",
+      "logoHint": "JPG, PNG or WebP, up to 2 MB (optional)",
+      "uploadLogo": "Upload logo",
+      "logoError": "Could not upload the logo. Please try a smaller image."
+    },
+    "step3": {
+      "title": "Add your first customers",
+      "subtitle": "Add a few now — you can always add more later.",
+      "name": "Name",
+      "phone": "Phone",
+      "city": "City",
+      "addRow": "Add another",
+      "importCsv": "Import from file",
+      "importHint": "CSV, Excel (.xlsx) or PDF — columns: Name, Phone, City",
+      "imported": "{count} customers loaded from file",
+      "added": "{count} customers added",
+      "empty": "No customers added yet."
+    },
+    "step4": {
+      "title": "Add your products",
+      "subtitle": "Tap a template to add it, then set your price.",
+      "templates": "Suggested for your industry",
+      "addCustom": "Add custom product",
+      "productName": "Product name",
+      "price": "Price (₹)",
+      "priceHint": "Price per unit. You can change this anytime.",
+      "remove": "Remove",
+      "added": "{count} products added",
+      "empty": "No products added yet."
+    },
+    "step5": {
+      "title": "Teach VyaOps your shorthand",
+      "subtitle": "We guessed how you might type product and customer names on WhatsApp. Confirm the ones that are right.",
+      "generating": "Generating suggestions…",
+      "generateFailed": "Could not generate suggestions. You can skip this and add them later.",
+      "weThink": "\"{term}\" means \"{canonical}\"",
+      "product": "Product",
+      "customer": "Customer",
+      "confirm": "Yes, correct",
+      "reject": "No",
+      "confirmed": "Saved",
+      "rejected": "Ignored",
+      "noEntries": "No suggestions to review. You're all set.",
+      "needData": "Add at least one product or customer first to generate suggestions.",
+      "reviewLater": "I'll review later"
+    },
+    "step6": {
+      "title": "Connect WhatsApp",
+      "subtitle": "Link your existing WhatsApp Business number so VyaOps can read and reply inside your chats.",
+      "instructions": "You'll be guided through a one-time secure connection. Your number keeps working in WhatsApp exactly as before — VyaOps simply works alongside it (Coexistence).",
+      "connect": "Connect WhatsApp",
+      "connecting": "Connecting…",
+      "connected": "WhatsApp connected ✓",
+      "connectError": "Could not connect. Please try again, or skip and connect later from Settings.",
+      "connectingSoon": "WhatsApp connection opens after launch. You can finish setup and connect from Settings.",
+      "later": "I'll connect later"
+    },
+    "step7": {
+      "title": "Your factory is ready! 🏭",
+      "subtitle": "Here's what you can do from here:",
+      "tour1": "Orders, invoices and production — captured straight from your WhatsApp chats.",
+      "tour2": "Live dashboard for cash flow, inventory and quality.",
+      "tour3": "Type /status in any customer chat for an instant summary.",
+      "goToDashboard": "Go to Dashboard",
+      "finishing": "Finishing up…"
+    }
   }
 }

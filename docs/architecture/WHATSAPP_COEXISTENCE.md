@@ -65,6 +65,34 @@ The owner never needs to learn any interface. He just replies naturally in his e
 8. 10-minute demo + first order hand-held (verify echo appears in n8n + DB)
 Total: <30 minutes, zero disruption
 
+## In-app Embedded Signup (Onboarding Wizard — Step 6)
+
+The onboarding wizard's "Connect WhatsApp" step runs Meta's Embedded Signup directly in
+the browser, using **Dualhook's** tech-provider Meta app (we never hold Dualhook's app secret).
+
+**Flow:**
+1. Client loads the Facebook JS SDK with `NEXT_PUBLIC_FB_APP_ID` and calls `FB.login()` with
+   `config_id = NEXT_PUBLIC_FB_CONFIG_ID`, `response_type: 'code'`,
+   `override_default_response_type: true`, and Coexistence extras
+   (`featureType: 'whatsapp_business_app_onboarding'`).
+2. Meta posts a `WA_EMBEDDED_SIGNUP` `message` event back to the page carrying the connected
+   `phone_number_id` + `waba_id`. The `FB.login` callback returns the short-lived auth `code`.
+3. Client sends `{ code, phoneNumberId, wabaId, displayPhoneNumber }` to the `connectWhatsApp`
+   server action.
+4. Server forwards to Dualhook (`src/lib/whatsapp/dualhook.ts` → `finalizeEmbeddedSignup`,
+   `POST {DUALHOOK_API_BASE}/embedded-signup`, `Authorization: Bearer DUALHOOK_API_KEY`).
+   **Dualhook** exchanges the code for the WABA token, subscribes the app + `smb_message_echoes`,
+   and returns the verified number details. We never see the access token.
+5. Server stores `whatsapp_phone_number_id` (PRIMARY org-lookup key), `whatsapp_display_number`,
+   `whatsapp_phone`, and `whatsapp_connected = true` on the org.
+
+**Config-gated:** when `NEXT_PUBLIC_FB_APP_ID` / `NEXT_PUBLIC_FB_CONFIG_ID` are unset, the step
+shows manual instructions + a "connect later" skip instead of a broken SDK call. The owner can
+always finish onboarding and connect later from Settings.
+
+**Env:** `NEXT_PUBLIC_FB_APP_ID`, `NEXT_PUBLIC_FB_CONFIG_ID`, `NEXT_PUBLIC_FB_GRAPH_VERSION`
+(optional, default `v21.0`), `DUALHOOK_API_KEY`, `DUALHOOK_API_BASE` (optional).
+
 ## Bot Activation Rules (replaces old Opt-In Trigger Model)
 
 **Rule A — Bot silence:** Bot NEVER sends a message to a customer chat except:

@@ -34,6 +34,18 @@ export function phonesMatch(a: string, b: string): boolean {
 }
 
 /**
+ * Validate + canonicalize a free-form Indian mobile to `91XXXXXXXXXX`
+ * (the comparison format above), or null if it is not a valid Indian mobile.
+ * Used by onboarding contact-import so junk phones are dropped (the customer's
+ * name is still saved) instead of failing the whole batch.
+ */
+export function toCanonicalIndianMobile(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  const n = normalizePhone(raw)
+  return /^91[6-9]\d{9}$/.test(n) ? n : null
+}
+
+/**
  * Mask a phone for logging: keep a 2-digit country prefix + last 4 digits, e.g.
  *   919876543210 → 91XXXX3210
  * Security rule #8: never write full phone numbers to console/Sentry. Use this
