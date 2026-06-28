@@ -16,6 +16,7 @@ import {
   ConfirmationParseResultSchema,
   ModificationParseResultSchema,
 } from '@/types/ai'
+import { logAiUsage } from './usage-logger'
 
 const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1'
 const MAX_RETRIES = 3
@@ -168,40 +169,65 @@ async function fetchWithRetry(
 }
 
 export async function callDeepSeek(request: AIRequest): Promise<AIResponse> {
-  const res = await fetchWithRetry(
-    `${DEEPSEEK_BASE_URL}/chat/completions`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: request.messages,
-        temperature: request.temperature ?? 0.3,
-        max_tokens: request.maxTokens ?? 2048,
-      }),
+  const start = Date.now()
+  try {
+    const res = await fetchWithRetry(
+      `${DEEPSEEK_BASE_URL}/chat/completions`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: request.messages,
+          temperature: request.temperature ?? 0.3,
+          max_tokens: request.maxTokens ?? 2048,
+        }),
+      }
+    )
+
+    if (!res.ok) {
+      const body = await res.text()
+      throw new Error(`DeepSeek error ${res.status}: ${body}`)
     }
-  )
 
-  if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`DeepSeek error ${res.status}: ${body}`)
-  }
+    const data = (await res.json()) as {
+      choices: Array<{ message: { content: string } }>
+      usage: { prompt_tokens: number; completion_tokens: number }
+    }
 
-  const data = (await res.json()) as {
-    choices: Array<{ message: { content: string } }>
-    usage: { prompt_tokens: number; completion_tokens: number }
-  }
-
-  return {
-    content: data.choices[0].message.content,
-    model: 'deepseek-chat',
-    usage: {
+    logAiUsage({
+      provider: 'deepseek',
+      model: 'deepseek-chat',
+      feature: request.logContext?.feature,
+      orgId: request.logContext?.orgId,
       promptTokens: data.usage.prompt_tokens,
       completionTokens: data.usage.completion_tokens,
-    },
+      latencyMs: Date.now() - start,
+      success: true,
+    })
+
+    return {
+      content: data.choices[0].message.content,
+      model: 'deepseek-chat',
+      usage: {
+        promptTokens: data.usage.prompt_tokens,
+        completionTokens: data.usage.completion_tokens,
+      },
+    }
+  } catch (err) {
+    logAiUsage({
+      provider: 'deepseek',
+      model: 'deepseek-chat',
+      feature: request.logContext?.feature,
+      orgId: request.logContext?.orgId,
+      latencyMs: Date.now() - start,
+      success: false,
+      errorCode: err instanceof Error ? err.message.slice(0, 200) : 'unknown',
+    })
+    throw err
   }
 }
 
@@ -242,6 +268,7 @@ async function classifyAndExtract(message: string, orgContext: OrgContext) {
     ],
     temperature: 0.1,
     maxTokens: 800,
+    logContext: { orgId: orgContext.orgId, feature: 'classify_extract' },
   })
 
   const raw = JSON.parse(response.content) as unknown
@@ -326,6 +353,7 @@ export async function classifyOwnerReply(
       ],
       temperature: 0.1,
       maxTokens: 128,
+      logContext: { feature: 'owner_reply' },
     })
 
     const raw = JSON.parse(response.content) as unknown
@@ -355,6 +383,7 @@ export async function parseConfirmation(
       ],
       temperature: 0.1,
       maxTokens: 128,
+      logContext: { feature: 'confirmation_parse' },
     })
 
     const raw = JSON.parse(response.content) as unknown
@@ -388,6 +417,7 @@ export async function parseModification(
       ],
       temperature: 0.1,
       maxTokens: 128,
+      logContext: { feature: 'modification_parse' },
     })
 
     const raw = JSON.parse(response.content) as unknown

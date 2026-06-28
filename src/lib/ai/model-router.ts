@@ -117,6 +117,7 @@ async function classifyAndExtractViaQwen(
     model: QWEN_MODEL,
     temperature: 0.1,
     maxTokens: 512,
+    logContext: { orgId: orgContext.orgId, feature: 'classify_extract' },
   })
 
   const raw = JSON.parse(response.content) as unknown

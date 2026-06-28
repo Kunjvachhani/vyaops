@@ -1,6 +1,16 @@
 import { createClient } from '@/lib/supabase/server'
 import type { Database } from '@/types/database'
 
+// A Supabase client scoped so that `organization_id` filters are authoritative: the
+// per-request server client (RLS-scoped to the caller's org) for tenant reads, or the
+// service-role admin client (RLS-bypassing) for cross-org cron snapshots.
+//
+// Typed against the @supabase/supabase-js client (the admin type, pulled via a type-only
+// import so there is NO runtime coupling to service-role). @supabase/ssr bundles an older
+// SupabaseClient at a different generic arity, so the legacy server client is cast to this
+// type once, at the boundary in calculateRupeesSaved — both query identically at runtime.
+type SavingsClient = typeof import('@/lib/supabase/admin').adminClient
+
 export type DateRange = 'this_month' | 'last_month' | 'last_3_months' | 'all_time'
 
 // Defaults when no historical baseline is available yet.
@@ -87,11 +97,11 @@ function getDateBounds(range: DateRange): { periodStart: Date; periodEnd: Date }
 }
 
 async function calcQualitySavings(
+  supabase: SavingsClient,
   orgId: string,
   periodStart: Date,
   periodEnd: Date,
 ): Promise<QualitySavingsDetail> {
-  const supabase = await createClient()
   const zero: QualitySavingsDetail = {
     baselineRejectionRate: INDUSTRY_AVG_REJECTION_RATE,
     currentRejectionRate: 0,
@@ -179,11 +189,11 @@ async function calcQualitySavings(
 }
 
 async function calcPaymentSpeedSavings(
+  supabase: SavingsClient,
   orgId: string,
   periodStart: Date,
   periodEnd: Date,
 ): Promise<PaymentSpeedSavingsDetail> {
-  const supabase = await createClient()
   const zero: PaymentSpeedSavingsDetail = {
     baselineDays: INDUSTRY_AVG_COLLECTION_DAYS,
     currentAvgDays: INDUSTRY_AVG_COLLECTION_DAYS,
@@ -275,11 +285,11 @@ async function calcPaymentSpeedSavings(
 }
 
 async function calcDuplicatePreventionSavings(
+  supabase: SavingsClient,
   orgId: string,
   periodStart: Date,
   periodEnd: Date,
 ): Promise<DuplicatePreventionSavingsDetail> {
-  const supabase = await createClient()
   const zero: DuplicatePreventionSavingsDetail = { duplicatesCaught: 0, avgOrderValuePaise: 0, savedPaise: 0 }
 
   // expired + NEW_ORDER pending_orders = detections superseded by a repeat message
@@ -320,11 +330,11 @@ async function calcDuplicatePreventionSavings(
 }
 
 async function calcTimeSavings(
+  supabase: SavingsClient,
   orgId: string,
   periodStart: Date,
   periodEnd: Date,
 ): Promise<TimeSavingsDetail> {
-  const supabase = await createClient()
   const zero: TimeSavingsDetail = {
     whatsappOrders: 0,
     whatsappBatches: 0,
@@ -368,14 +378,20 @@ async function calcTimeSavings(
 export async function calculateRupeesSaved(
   orgId: string,
   dateRange: DateRange,
+  client?: SavingsClient,
 ): Promise<RupeesSavedBreakdown> {
+  // Default: the RLS-scoped per-request server client (tenant reads). Cross-org callers
+  // (the savings-snapshot cron) pass the service-role adminClient explicitly. The server
+  // client is cast because @supabase/ssr bundles SupabaseClient at a different generic
+  // arity than @supabase/supabase-js — see the SavingsClient note above.
+  const supabase = client ?? ((await createClient()) as unknown as SavingsClient)
   const { periodStart, periodEnd } = getDateBounds(dateRange)
 
   const [quality, paymentSpeed, duplicatePrevention, time] = await Promise.all([
-    calcQualitySavings(orgId, periodStart, periodEnd),
-    calcPaymentSpeedSavings(orgId, periodStart, periodEnd),
-    calcDuplicatePreventionSavings(orgId, periodStart, periodEnd),
-    calcTimeSavings(orgId, periodStart, periodEnd),
+    calcQualitySavings(supabase, orgId, periodStart, periodEnd),
+    calcPaymentSpeedSavings(supabase, orgId, periodStart, periodEnd),
+    calcDuplicatePreventionSavings(supabase, orgId, periodStart, periodEnd),
+    calcTimeSavings(supabase, orgId, periodStart, periodEnd),
   ])
 
   return {

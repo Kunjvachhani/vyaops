@@ -34,6 +34,59 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_usage: {
+        Row: {
+          completion_tokens: number
+          created_at: string
+          error_code: string | null
+          feature: string | null
+          id: string
+          latency_ms: number
+          model: string
+          organization_id: string | null
+          prompt_tokens: number
+          provider: string
+          success: boolean
+          total_tokens: number
+        }
+        Insert: {
+          completion_tokens?: number
+          created_at?: string
+          error_code?: string | null
+          feature?: string | null
+          id?: string
+          latency_ms?: number
+          model: string
+          organization_id?: string | null
+          prompt_tokens?: number
+          provider: string
+          success?: boolean
+          total_tokens?: number
+        }
+        Update: {
+          completion_tokens?: number
+          created_at?: string
+          error_code?: string | null
+          feature?: string | null
+          id?: string
+          latency_ms?: number
+          model?: string
+          organization_id?: string | null
+          prompt_tokens?: number
+          provider?: string
+          success?: boolean
+          total_tokens?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'ai_usage_organization_id_fkey'
+            columns: ['organization_id']
+            isOneToOne: false
+            referencedRelation: 'organizations'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       audit_log: {
         Row: {
           action: string
@@ -933,10 +986,13 @@ export type Database = {
           phone: string
           razorpay_customer_id: string | null
           razorpay_subscription_id: string | null
+          savings_calculated_at: string | null
           state: string
           tier: string
+          tier_source: string
           tier_valid_until: string | null
           timezone: string
+          total_saved_paise: number
           updated_at: string
           whatsapp_connected: boolean
           whatsapp_display_number: string | null
@@ -964,10 +1020,13 @@ export type Database = {
           phone: string
           razorpay_customer_id?: string | null
           razorpay_subscription_id?: string | null
+          savings_calculated_at?: string | null
           state?: string
           tier?: string
+          tier_source?: string
           tier_valid_until?: string | null
           timezone?: string
+          total_saved_paise?: number
           updated_at?: string
           whatsapp_connected?: boolean
           whatsapp_display_number?: string | null
@@ -995,10 +1054,13 @@ export type Database = {
           phone?: string
           razorpay_customer_id?: string | null
           razorpay_subscription_id?: string | null
+          savings_calculated_at?: string | null
           state?: string
           tier?: string
+          tier_source?: string
           tier_valid_until?: string | null
           timezone?: string
+          total_saved_paise?: number
           updated_at?: string
           whatsapp_connected?: boolean
           whatsapp_display_number?: string | null
