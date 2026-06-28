@@ -3667,16 +3667,78 @@ Add to src/app/(admin)/admin/page.tsx (keep the existing platform-admin gate + r
    - View error logs from Sentry
 ```
 
+> **✅ S8.2 AS-BUILT (2026-06-27):** Additive widgets shipped onto the existing admin shell.
+> - **`src/app/(admin)/admin/_data.ts`** — `getAdminMetrics()` (service-role, cross-org, `server-only`):
+>   customer overview rows, system-health counts, MRR/tier breakdown, churn. Computes "today" and
+>   "this month" against IST day/month boundaries.
+> - **`src/app/(admin)/admin/_components/overview-client.tsx`** — sortable (any column) + org/owner
+>   searchable customer table with an inline per-row tier selector.
+> - **`src/app/api/admin/set-tier/route.ts`** — `POST { org_id, tier }`, `getPlatformAdmin()`-gated,
+>   audited as `source: 'platform_admin'`, `entity_type: 'organization'`. This is the ONE authorized
+>   exception to CLAUDE.md rule 7 ("tier set ONLY by Razorpay webhook") — comp/beta overrides only;
+>   it does NOT touch `billing_status` or Razorpay.
+> - **`page.tsx`** now renders Revenue (MRR + by-tier + churn), System health, and Customer overview
+>   sections above the existing recent-audit table; `export const dynamic = 'force-dynamic'`.
+> - **MRR / active-subscription definition (2026-06-28 fix):** an org counts toward MRR ONLY when
+>   `razorpay_subscription_id IS NOT NULL` **AND `billing_status = 'active'`** (exactly). The subscription
+>   id is required because `billing_status` defaults to `'active'` on signup, so the flag alone is NOT
+>   proof of payment. `grace_period` is now **excluded** from MRR/active-subs — a failed renewal in retry
+>   is not recognised revenue (access-gating still grants grace via `billingAllowsPaidAccess`, a separate
+>   concern). MRR sums `RAZORPAY_PLANS[tier].amountPaise`. See `hasActiveSubscription()` in `_data.ts`.
+> - **Churn this month** = distinct orgs with a `billing_events.event_type = 'subscription.cancelled'`
+>   row dated in the current IST month.
+> - **"₹ Saved"** in the table is a lightweight *estimate* (WhatsApp-sourced order/batch time savings
+>   only — the cheap, cross-org slice of `src/lib/utils/rupees-saved.ts`), labelled as such in the UI.
+> - **AI usage IS now tracked (2026-06-28):** migration `20260628000001_create_ai_usage.sql` adds the
+>   `ai_usage` table (service-role-only, RLS-locked — same pattern as `platform_admins`). Every upstream
+>   LLM call is logged via `src/lib/ai/usage-logger.ts` (`logAiUsage`, fire-and-forget, never throws,
+>   skipped under `NODE_ENV=test`) from the `callDeepSeek` / `callOpenRouter` wrappers — capturing
+>   provider, model, prompt/completion tokens, latency, success/error, and a `feature` tag
+>   (`classify_extract` | `eval` | `owner_reply` | `confirmation_parse` | `modification_parse`). The
+>   dashboard's System-health card now shows real **AI calls today**, avg latency, error rate, and
+>   per-provider token spend + **estimated USD cost** (rates in `USD_PER_MILLION_TOKENS` in `_data.ts`).
+>   ⚠️ The `ai_usage` migration must be applied (local + remote) before the dashboard query works.
+> - **Quick actions:** tier change (built), Sentry deep-link (`SENTRY_DASHBOARD_URL` env, defaults to
+>   sentry.io), and the existing Recovery page for cross-org data access. Full org-context *impersonation*
+>   was deliberately NOT built (security-sensitive); replaced by a read-only drill-down — see #5 below.
+>
+> **✅ S8.2 follow-ups (2026-06-28) — #4 savings snapshot, #5 org drill-down, #3 tier_source:**
+> - **#4 — Cached "₹ Saved" (snapshot):** the heavy rupees-saved engine now accepts a Supabase client
+>   (`calculateRupeesSaved(orgId, range, client?)`), so a cron can run it cross-org with `adminClient`.
+>   Migration `20260628000002_org_savings_snapshot.sql` adds `organizations.total_saved_paise` +
+>   `savings_calculated_at`; `GET /api/cron/savings-snapshot` (auth: Vercel Cron `Bearer CRON_SECRET`
+>   OR n8n `x-internal-api-key`) recomputes all-time savings per org nightly (`vercel.json` cron, 01:00
+>   UTC) with per-org error isolation. The admin table reads the cached column (0 until first run).
+>   NOTE: `rupees-saved.ts` types its client param against the supabase-js (admin) client and casts the
+>   `@supabase/ssr` server client once at the boundary — the two packages bundle `SupabaseClient` at
+>   different generic arities.
+> - **#5 — Read-only org drill-down:** `src/app/(admin)/admin/orgs/[id]/page.tsx` (force-dynamic,
+>   service-role reads) — org profile, billing + recent billing_events, team, counts (orders/invoices/
+>   customers/vendors/batches), cached ₹ saved, and recent orders/invoices. Org name in the overview
+>   table links here. This is the safe alternative to session impersonation (no token juggling, no RLS
+>   bypass on the tenant's session).
+> - **#3 — `tier_source` marker:** migration `20260628000003_org_tier_source.sql` adds
+>   `organizations.tier_source ∈ {billing, comp}` (default `billing`). `/api/admin/set-tier` sets it to
+>   `'comp'` (audited); the Razorpay webhook resets it to `'billing'` whenever it sets a tier — so a real
+>   payment transparently reclaims a comped org. Comped orgs show a **COMP** badge in the overview and a
+>   "Tier source" field in the drill-down. Makes the rule-7 exception legible + self-healing.
+> - **New env:** `CRON_SECRET` (Vercel Cron bearer). **Migrations to apply (local + remote):**
+>   `20260628000001` (ai_usage), `20260628000002` (savings snapshot), `20260628000003` (tier_source).
+
 **VERIFY:**
 ```bash
 npm run dev
 # Login as a seeded platform admin (row in platform_admins + app_metadata.is_platform_admin) → /admin loads
 # Login as a regular org owner → /admin REDIRECTS to /dashboard (not a 403)
+# Customer overview: sort each column header, search by org/owner, change a tier inline → toast + row updates
+# Manual tier change is audited (changed_by_source = platform_admin) → visible in the recent-audit table
+# Inline tier change → org shows a COMP badge (tier_source='comp'); click an org name → read-only drill-down
+# Run the savings cron once: curl -H "Authorization: Bearer $CRON_SECRET" localhost:3000/api/cron/savings-snapshot → ₹ Saved populates
 ```
 
 **COMMIT:**
 ```bash
-git add . && git commit -m "feat: Admin dashboard — org overview, system health, revenue"
+git add . && git commit -m "feat: Admin dashboard — org overview, system health, revenue, manual tier override"
 git push
 ```
 

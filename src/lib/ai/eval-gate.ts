@@ -87,6 +87,7 @@ export async function evaluateExtraction(
     model: QWEN_EVAL_MODEL,
     temperature: 0.1,
     maxTokens: 512,
+    logContext: { feature: 'eval' },
   })
 
   const raw = JSON.parse(response.content) as unknown

@@ -11,6 +11,9 @@ export interface AIRequest {
   maxTokens?: number
   model?: string
   forceModel?: 'deepseek' | 'qwen'
+  // Optional attribution for the ai_usage log (org + which pipeline step). Purely
+  // observational — never affects routing or the API call itself.
+  logContext?: { orgId?: string; feature?: string }
 }
 
 export interface AIUsage {

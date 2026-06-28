@@ -58,6 +58,8 @@ async function handleSubscriptionAuthenticated(
     .update({
       tier,
       billing_status: 'active',
+      // A real payment reclaims any manual comp — see migration 20260628000003.
+      tier_source: 'billing',
     })
     .eq('id', orgId)
 
@@ -92,7 +94,7 @@ async function handleSubscriptionCharged(
     .from('organizations')
     .update({
       billing_status: 'active',
-      ...(tier ? { tier } : {}),
+      ...(tier ? { tier, tier_source: 'billing' } : {}),
       ...(tierValidUntil ? { tier_valid_until: tierValidUntil } : {}),
     })
     .eq('id', orgId)
