@@ -252,13 +252,21 @@ export function tokenAwareScore(raw: string, candidate: string): number {
   return Math.max(...scores)
 }
 
+/**
+ * Best whole-string score across a candidate's searchable fields (name + aliases).
+ * Used by matchProduct: product names commonly share a generic trailing category
+ * token ("Pump Housing" vs "Gear Box Housing"), so token-vs-token max scoring would
+ * false-match on the shared word. Whole-string Levenshtein + phonetic stays safe.
+ */
 function bestScoreForFields(raw: string, fields: string[]): number {
   const scores = fields.filter(f => f.length > 0).map(f => scoreAgainst(raw, f))
   return scores.length > 0 ? Math.max(...scores) : 0
 }
 
 /**
- * Like bestScoreForFields but uses token-aware scoring (for customer matching).
+ * Best token-aware score across a candidate's searchable fields (name + aliases).
+ * Used by matchCustomer — token-vs-token recovers first-name / honorific matches
+ * ("vijay" → "Vijay Mehta"). NOT used for products (see bestScoreForFields).
  */
 function bestTokenAwareScore(raw: string, fields: string[]): number {
   const scores = fields.filter(f => f.length > 0).map(f => tokenAwareScore(raw, f))
@@ -342,6 +350,12 @@ export async function matchProduct(
     }
   }
 
+  // Whole-string scoring (NOT token-aware): product names frequently share a
+  // generic trailing category token ("Pump Housing" vs "Gear Box Housing",
+  // "Cotton Fabric" vs "Viscose Fabric"). Token-vs-token max scoring would match
+  // those at 1.0 on the shared category word and auto-resolve to the WRONG product
+  // — a wrong-order safety hazard. Disambiguation is left to dialect Layer 0 and
+  // the confirm gate, not a permissive matcher.
   const scored = products
     .map(product => ({
       product,

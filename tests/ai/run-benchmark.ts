@@ -277,7 +277,8 @@ async function runCase(testCase: BenchmarkCase, catalog: IndustryCatalog | undef
 
     // Step 2: fuzzy resolution against the industry catalog. Customers use the
     // token-aware scorer (matches production matchCustomer); products use the
-    // whole-string scorer (matches matchProduct).
+    // whole-string scorer (matches matchProduct — token-aware would false-match on
+    // shared category tokens like "Housing"/"Fabric").
     const customerEntity = entityResult.entities.find((e) => e.type === 'customer_name')
     const productEntity = entityResult.entities.find((e) => e.type === 'product_name')
 
